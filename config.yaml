@@ -1,0 +1,12 @@
+ServerPort: 8080
+EnableTLS: false
+DisableNoTLS: false
+ServerPortTLS: 10443
+CertPathCrt: "./cert/full-cert.crt"
+CertPathKey: "./cert/private-key.key"
+Key: "12345"
+DefaultLat: "44.0"
+DefaultLon: "10.0"
+DefaultZoom: 16
+ShowOnlyLastPos: false
+MapRefreshTime: 360

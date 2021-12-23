@@ -1,0 +1,42 @@
+
+<html>
+<head>
+  <title>Live Tracking</title>
+  <link rel="stylesheet" href="./static/leaflet.css"/>
+  <script src="./static/leaflet.js"></script>
+  <style>
+    #map{ height: 100% }
+  </style>
+  <meta http-equiv="refresh" content="{{.MapRefreshTime}}">
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <script>
+
+  // initialize the map
+  var map = L.map('map').setView([{{.DefaultLat}}, {{.DefaultLon}}], {{.DefaultZoom}});
+  L.control.scale().addTo(map)
+  // load a tile layer
+L.tileLayer( 
+	'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    subdomains: ['a','b','c']
+	}).addTo( map );
+  {{if .ShowOnlyLastPos}}{{else}}
+	var latlngs = [ 
+  {{range .Latlonhistory}}  [{{.}}],
+  {{end}}
+];
+
+var polyline = L.polyline(latlngs, {color: 'red'}).addTo(map);
+// zoom the map to the polyline
+map.fitBounds(polyline.getBounds());
+{{end}}
+{{.Lastpos}}
+
+  </script>
+  
+</body>
+</html>
