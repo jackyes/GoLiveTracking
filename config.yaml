@@ -10,3 +10,4 @@ DefaultLon: "10.0"
 DefaultZoom: 16
 ShowOnlyLastPos: false
 MapRefreshTime: 360
+ConsoleDebug: false
