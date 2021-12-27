@@ -30,6 +30,7 @@ type Cfg struct {
 	ShowOnlyLastPos bool   `yaml:"ShowOnlyLastPos"`
 	MapRefreshTime  string `yaml:"MapRefreshTime"`
 	DefaultZoom     string `yaml:"DefaultZoom"`
+	ConsoleDebug    bool   `yaml:"ConsoleDebug"`
 }
 
 var AppConfig Cfg
@@ -134,22 +135,25 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	lat := r.URL.Query().Get("lat")
 	lon := r.URL.Query().Get("lon")
 	timestamp := r.URL.Query().Get("timestamp")
-	//	hdop := r.URL.Query().Get("hdop")
 	altitude := r.URL.Query().Get("altitude")
 	speed := r.URL.Query().Get("speed")
 	bearing := r.URL.Query().Get("bearing")
 	key := r.URL.Query().Get("key")
 
-	//For Debug Purpose...will be deleted...
-	fmt.Println("lat =>", lat)
-	fmt.Println("lon =>", lon)
-	fmt.Println("timestamp =>", timestamp)
-	//	fmt.Println("hdop =>", hdop)
-	fmt.Println("altitude =>", altitude)
-	fmt.Println("speed =>", speed)
-	fmt.Println("bearing =>", bearing)
-	fmt.Println("key =>", key)
-	//For Debug Purpose...will be deleted...END
+	if key != AppConfig.Key {
+		fmt.Println("Wrong key.")
+		return
+	}
+
+	if AppConfig.ConsoleDebug {
+		fmt.Println("lat =>", lat)
+		fmt.Println("lon =>", lon)
+		fmt.Println("timestamp =>", timestamp)
+		fmt.Println("altitude =>", altitude)
+		fmt.Println("speed =>", speed)
+		fmt.Println("bearing =>", bearing)
+		fmt.Println("key =>", key)
+	}
 
 	//data verification will happen here...
 	if lat == "" || lon == "" {
