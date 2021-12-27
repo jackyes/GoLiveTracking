@@ -106,7 +106,7 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 
 func getResetPoint(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
-	if key == AppConfig.Key { // Implement better key check
+	if key == AppConfig.Key {
 		e := os.Remove("./point.latest")
 		if e != nil {
 			fmt.Println(e)
