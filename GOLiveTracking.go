@@ -18,19 +18,23 @@ var templates = template.Must(template.ParseFiles("pages/index.html"))
 
 // Declaration of struct needed for config.yaml
 type Cfg struct {
-	ServerPort      string `yaml:"ServerPort"`
-	ServerPortTLS   string `yaml:"ServerPortTLS"`
-	CertPathCrt     string `yaml:"CertPathCrt"`
-	CertPathKey     string `yaml:"CertPathKey"`
-	Key             string `yaml:"Key"`
-	EnableTLS       bool   `yaml:"EnableTLS"`
-	DisableNoTLS    bool   `yaml:"DisableNoTLS"`
-	DefaultLat      string `yaml:"DefaultLat"`
-	DefaultLon      string `yaml:"DefaultLon"`
-	ShowOnlyLastPos bool   `yaml:"ShowOnlyLastPos"`
-	MapRefreshTime  string `yaml:"MapRefreshTime"`
-	DefaultZoom     string `yaml:"DefaultZoom"`
-	ConsoleDebug    bool   `yaml:"ConsoleDebug"`
+	ServerPort         string `yaml:"ServerPort"`
+	ServerPortTLS      string `yaml:"ServerPortTLS"`
+	CertPathCrt        string `yaml:"CertPathCrt"`
+	CertPathKey        string `yaml:"CertPathKey"`
+	Key                string `yaml:"Key"`
+	EnableTLS          bool   `yaml:"EnableTLS"`
+	DisableNoTLS       bool   `yaml:"DisableNoTLS"`
+	DefaultLat         string `yaml:"DefaultLat"`
+	DefaultLon         string `yaml:"DefaultLon"`
+	ShowOnlyLastPos    bool   `yaml:"ShowOnlyLastPos"`
+	MapRefreshTime     string `yaml:"MapRefreshTime"`
+	DefaultZoom        string `yaml:"DefaultZoom"`
+	ConsoleDebug       bool   `yaml:"ConsoleDebug"`
+	MaxGetParmLen      int    `yaml:"MaxGetParmLen"`
+	ShowPrecisonCircle bool   `yaml:"ShowPrecisonCircle"`
+	MinZoom            string `yaml:"MinZoom"`
+	MaxZoom            string `yaml:"MaxZoom"`
 }
 
 var AppConfig Cfg
@@ -44,6 +48,8 @@ type Page struct {
 	ShowOnlyLastPos bool
 	MapRefreshTime  string
 	DefaultZoom     string
+	MinZoom         string
+	MaxZoom         string
 }
 
 func main() {
@@ -100,6 +106,8 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 		ShowOnlyLastPos: AppConfig.ShowOnlyLastPos,
 		MapRefreshTime:  AppConfig.MapRefreshTime,
 		DefaultZoom:     AppConfig.DefaultZoom,
+		MinZoom:         AppConfig.MinZoom,
+		MaxZoom:         AppConfig.MaxZoom,
 	}
 	renderTemplate(w, "index", p)
 }
@@ -138,6 +146,7 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	altitude := r.URL.Query().Get("altitude")
 	speed := r.URL.Query().Get("speed")
 	bearing := r.URL.Query().Get("bearing")
+	hdop := r.URL.Query().Get("hdop")
 	key := r.URL.Query().Get("key")
 
 	if key != AppConfig.Key {
@@ -152,6 +161,7 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("altitude =>", altitude)
 		fmt.Println("speed =>", speed)
 		fmt.Println("bearing =>", bearing)
+		fmt.Println("HDOP =>", hdop)
 		fmt.Println("key =>", key)
 	}
 
@@ -162,7 +172,7 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	} else if !isNumeric(lat) || !isNumeric(lon) {
 		fmt.Println("LAT/LON Not number")
 		return
-	} else if len(lat) > 15 || len(lon) > 15 {
+	} else if len(lat) > AppConfig.MaxGetParmLen || len(lon) > AppConfig.MaxGetParmLen {
 		fmt.Println("LAT/LON too big")
 		return
 	}
@@ -171,7 +181,7 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	} else if !isNumeric(timestamp) {
 		fmt.Println("Timestamp not numeric")
 		return
-	} else if len(timestamp) > 15 {
+	} else if len(timestamp) > AppConfig.MaxGetParmLen {
 		fmt.Println("timestamp too big")
 		return
 	}
@@ -180,7 +190,7 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	} else if !isNumeric(altitude) {
 		fmt.Println("Altitude not numeric")
 		return
-	} else if len(altitude) > 15 {
+	} else if len(altitude) > AppConfig.MaxGetParmLen {
 		fmt.Println("Altitude too big")
 		return
 	}
@@ -189,14 +199,23 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	} else if !isNumeric(speed) {
 		fmt.Println("Speed not numeric")
 		return
-	} else if len(speed) > 15 {
+	} else if len(speed) > AppConfig.MaxGetParmLen {
 		fmt.Println("Speed too big")
 		return
 	}
 	if bearing == "" {
 		bearing = "0"
-	} else if len(bearing) > 15 {
+	} else if len(bearing) > AppConfig.MaxGetParmLen {
 		fmt.Println("bearing too big")
+		return
+	}
+	if hdop == "" {
+		hdop = "0"
+	} else if !isNumeric(hdop) {
+		fmt.Println("hdop not numeric")
+		return
+	} else if len(timestamp) > AppConfig.MaxGetParmLen {
+		fmt.Println("hdop too big")
 		return
 	}
 	//data verification finish...
@@ -206,12 +225,27 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Unable to open file:", err)
 	}
 
-	len, err := file.WriteString(fmt.Sprintf("L.marker([%s,%s]).addTo(map).bindPopup('Lat: %s<br>Lon: %s<br>Altitude: %s<br>Speed: %s<br>Time: %s<br>Bearing: %s').openPopup();", lat, lon, lat, lon, altitude, speed, timestamp, bearing))
+	if AppConfig.ShowPrecisonCircle {
 
+	}
+	len, err := file.WriteString(fmt.Sprintf("L.marker([%s,%s]).addTo(map).bindPopup('Lat: %s<br>Lon: %s<br>Altitude: %s<br>Speed: %s<br>Time: %s<br>Bearing: %s<br>HDOP: %s').openPopup();", lat, lon, lat, lon, altitude, speed, timestamp, bearing, hdop))
+	if AppConfig.ShowPrecisonCircle {
+		len, err := file.WriteString(fmt.Sprintf(`
+var circle = L.circle([%s, %s], {
+	color: 'blue',
+	fillColor: '#g03',
+	fillOpacity: 0.3,
+	radius: %s
+}).addTo(map);`, lat, lon, hdop))
+		fmt.Printf("%d character written successfully into file (Precision).\n", len)
+		if err != nil {
+			fmt.Println("Unable to write data:", err)
+		}
+	}
 	if err != nil {
 		fmt.Println("Unable to write data:", err)
 	}
-	fmt.Printf("%d character written successfully into file", len)
+	fmt.Printf("%d character written successfully into file.\n", len)
 	file.Close()
 
 	w.WriteHeader(200)
