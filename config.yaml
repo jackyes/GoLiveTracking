@@ -11,3 +11,7 @@ DefaultZoom: 16
 ShowOnlyLastPos: false
 MapRefreshTime: 360
 ConsoleDebug: false
+MaxGetParmLen: 15
+ShowPrecisonCircle: true
+MinZoom: 10
+MaxZoom: 18
