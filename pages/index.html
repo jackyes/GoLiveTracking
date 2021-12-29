@@ -18,16 +18,24 @@
   // initialize the map
   var map = L.map('map').setView([{{.DefaultLat}}, {{.DefaultLon}}], {{.DefaultZoom}});
   L.control.scale().addTo(map)
+  map.options.minZoom = {{.MinZoom}};
+  map.options.maxZoom = {{.MaxZoom}};
   // load a tile layer
-L.tileLayer( 
-	'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    subdomains: ['a','b','c']
-	}).addTo( map );
-  {{if .ShowOnlyLastPos}}{{else}}
-	var latlngs = [ 
-  {{range .Latlonhistory}}  [{{.}}],
-  {{end}}
+  const basemaps = {
+  OpenStreetMap: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', subdomains: ['a','b','c']}),
+  GoogleStreets: L.tileLayer('http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',{attribution: '&copy; GoogleMap', maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3']}),
+  GoogleHybrid: L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{attribution: '&copy; GoogleMap', maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3']}),
+  GoogleSat: L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{attribution: '&copy; GoogleMap', maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3']}),
+  GoogleTerrain: L.tileLayer('http://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',{attribution: '&copy; GoogleMap', maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3']}),
+};
+  
+L.control.layers(basemaps).addTo(map);
+
+basemaps.OpenStreetMap.addTo(map);
+{{if .ShowOnlyLastPos}}{{else}}
+var latlngs = [ 
+{{range .Latlonhistory}}  [{{.}}],
+{{end}}
 ];
 
 var polyline = L.polyline(latlngs, {color: 'red'}).addTo(map);
