@@ -5,13 +5,15 @@ ServerPortTLS: 10443
 CertPathCrt: "./cert/full-cert.crt"
 CertPathKey: "./cert/private-key.key"
 Key: "12345"
-DefaultLat: "44.0"
-DefaultLon: "10.0"
-DefaultZoom: 16
-ShowOnlyLastPos: false
-MapRefreshTime: 360
+DefaultLat: "44.0" #Default LAT position if no track present
+DefaultLon: "10.0" #Default LON position if no track present
+DefaultZoom: 16 #Zoom level when map is open/refreshed
+ShowOnlyLastPos: false #Show only the last position marker on map, ignore history
+MapRefreshTime: 360 #Map refresh time interval in seconds
 ConsoleDebug: false
-MaxGetParmLen: 15
-ShowPrecisonCircle: true
+MaxGetParmLen: 15  #Max lenght of parameters (LAT,LON,altitude,ecc)
+ShowPrecisonCircle: true  #Shows a circle that reflects GPS accuracy
 MinZoom: 10
 MaxZoom: 18
+ConvertTimestamp: true    #convert unix timestamp in human readable date (ex: 1640863410894 -> 2021-12-30 13:57:30 +0100 CET )
+TimeZone: "Europe/Rome"   #Use value from:https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
