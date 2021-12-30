@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"text/template"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -35,6 +36,8 @@ type Cfg struct {
 	ShowPrecisonCircle bool   `yaml:"ShowPrecisonCircle"`
 	MinZoom            string `yaml:"MinZoom"`
 	MaxZoom            string `yaml:"MaxZoom"`
+	ConvertTimestamp   bool   `yaml:"ConvertTimestamp"`
+	TimeZone           string `yaml:"TimeZone"`
 }
 
 var AppConfig Cfg
@@ -184,6 +187,8 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	} else if len(timestamp) > AppConfig.MaxGetParmLen {
 		fmt.Println("timestamp too big")
 		return
+	} else if AppConfig.ConvertTimestamp {
+		timestamp = fmt.Sprintf("%s", TimeStampConvert(timestamp))
 	}
 	if altitude == "" {
 		altitude = "0"
@@ -214,10 +219,11 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	} else if !isNumeric(hdop) {
 		fmt.Println("hdop not numeric")
 		return
-	} else if len(timestamp) > AppConfig.MaxGetParmLen {
+	} else if len(hdop) > AppConfig.MaxGetParmLen {
 		fmt.Println("hdop too big")
 		return
 	}
+
 	//data verification finish...
 
 	file, err := os.Create("./point.latest")
@@ -225,9 +231,6 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Unable to open file:", err)
 	}
 
-	if AppConfig.ShowPrecisonCircle {
-
-	}
 	len, err := file.WriteString(fmt.Sprintf("L.marker([%s,%s]).addTo(map).bindPopup('Lat: %s<br>Lon: %s<br>Altitude: %s<br>Speed: %s<br>Time: %s<br>Bearing: %s<br>HDOP: %s').openPopup();", lat, lon, lat, lon, altitude, speed, timestamp, bearing, hdop))
 	if AppConfig.ShowPrecisonCircle {
 		len, err := file.WriteString(fmt.Sprintf(`
@@ -288,4 +291,15 @@ func ReadConfig() {
 	if err != nil {
 		fmt.Println(err)
 	}
+}
+
+func TimeStampConvert(e string) (dtime time.Time) {
+	data, err := strconv.ParseInt(e, 10, 64)
+	if err != nil {
+		fmt.Println(err)
+	}
+	loc, _ := time.LoadLocation(AppConfig.TimeZone)
+	dtime = time.Unix(data/1000, 0).In(loc)
+	fmt.Println(dtime)
+	return
 }
