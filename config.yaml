@@ -18,4 +18,4 @@ MaxZoom: 18
 ConvertTimestamp: true    #convert unix timestamp in human readable date (ex: 1640863410894 -> 2021-12-30 13:57:30 +0100 CET )
 TimeZone: "Europe/Rome"   #Use value from:https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 MaxShowPoint: 0     # 0 for all, set te number of max track point
-ShowMapOnlyWithUser: false  #Show map onlu if user is passed as get parameter
+ShowMapOnlyWithUser: false  #Show map only if user is passed as get parameter
