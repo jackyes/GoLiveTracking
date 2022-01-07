@@ -21,26 +21,27 @@ var templates = template.Must(template.ParseFiles("pages/index.html"))
 
 // Declaration of struct needed for config.yaml
 type Cfg struct {
-	ServerPort         string `yaml:"ServerPort"`
-	ServerPortTLS      string `yaml:"ServerPortTLS"`
-	CertPathCrt        string `yaml:"CertPathCrt"`
-	CertPathKey        string `yaml:"CertPathKey"`
-	Key                string `yaml:"Key"`
-	EnableTLS          bool   `yaml:"EnableTLS"`
-	DisableNoTLS       bool   `yaml:"DisableNoTLS"`
-	DefaultLat         string `yaml:"DefaultLat"`
-	DefaultLon         string `yaml:"DefaultLon"`
-	ShowOnlyLastPos    bool   `yaml:"ShowOnlyLastPos"`
-	MapRefreshTime     string `yaml:"MapRefreshTime"`
-	DefaultZoom        string `yaml:"DefaultZoom"`
-	ConsoleDebug       bool   `yaml:"ConsoleDebug"`
-	MaxGetParmLen      int    `yaml:"MaxGetParmLen"`
-	ShowPrecisonCircle bool   `yaml:"ShowPrecisonCircle"`
-	MinZoom            string `yaml:"MinZoom"`
-	MaxZoom            string `yaml:"MaxZoom"`
-	ConvertTimestamp   bool   `yaml:"ConvertTimestamp"`
-	TimeZone           string `yaml:"TimeZone"`
-	MaxShowPoint       string `yaml:"MaxShowPoint"`
+	ServerPort          string `yaml:"ServerPort"`
+	ServerPortTLS       string `yaml:"ServerPortTLS"`
+	CertPathCrt         string `yaml:"CertPathCrt"`
+	CertPathKey         string `yaml:"CertPathKey"`
+	Key                 string `yaml:"Key"`
+	EnableTLS           bool   `yaml:"EnableTLS"`
+	DisableNoTLS        bool   `yaml:"DisableNoTLS"`
+	DefaultLat          string `yaml:"DefaultLat"`
+	DefaultLon          string `yaml:"DefaultLon"`
+	ShowOnlyLastPos     bool   `yaml:"ShowOnlyLastPos"`
+	MapRefreshTime      string `yaml:"MapRefreshTime"`
+	DefaultZoom         string `yaml:"DefaultZoom"`
+	ConsoleDebug        bool   `yaml:"ConsoleDebug"`
+	MaxGetParmLen       int    `yaml:"MaxGetParmLen"`
+	ShowPrecisonCircle  bool   `yaml:"ShowPrecisonCircle"`
+	MinZoom             string `yaml:"MinZoom"`
+	MaxZoom             string `yaml:"MaxZoom"`
+	ConvertTimestamp    bool   `yaml:"ConvertTimestamp"`
+	TimeZone            string `yaml:"TimeZone"`
+	MaxShowPoint        string `yaml:"MaxShowPoint"`
+	ShowMapOnlyWithUser bool   `yaml:"ShowMapOnlyWithUser"`
 }
 
 var AppConfig Cfg
@@ -83,6 +84,27 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	user := r.URL.Query().Get("user")
+	session := r.URL.Query().Get("session")
+	if AppConfig.ShowMapOnlyWithUser == true && user == "" { //show only if user is provided
+		http.NotFound(w, r)
+		return
+	}
+
+	if user != "" && !isNumeric(user) {
+		fmt.Println("User not numeric")
+		return
+	} else if len(user) > AppConfig.MaxGetParmLen {
+		fmt.Println("User too big")
+		return
+	}
+	if session != "" && !isNumeric(session) {
+		fmt.Println("Session not numeric")
+		return
+	} else if len(session) > AppConfig.MaxGetParmLen {
+		fmt.Println("Session too big")
+		return
+	}
 
 	var latlonhistoryfromDB []string
 
@@ -94,8 +116,14 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	if AppConfig.MaxShowPoint != "0" {
 		limit = " LIMIT " + AppConfig.MaxShowPoint
 	}
-	fmt.Println(limit)
-	rows, err := db.Query("SELECT lat, lon FROM Points ORDER BY ID DESC" + limit)
+	var usrsession string = ""
+	if user != "" {
+		usrsession = " WHERE user=" + user
+		if session != "" {
+			usrsession = " WHERE user=" + user + " AND session=" + session
+		}
+	}
+	rows, err := db.Query("SELECT lat, lon FROM Points " + usrsession + " ORDER BY ID DESC" + limit)
 	checkErr(err)
 	defer rows.Close()
 
@@ -163,6 +191,8 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	speed := r.URL.Query().Get("speed")
 	bearing := r.URL.Query().Get("bearing")
 	hdop := r.URL.Query().Get("hdop")
+	user := r.URL.Query().Get("user")
+	session := r.URL.Query().Get("session")
 	key := r.URL.Query().Get("key")
 
 	if key != AppConfig.Key {
@@ -178,6 +208,8 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("speed =>", speed)
 		fmt.Println("bearing =>", bearing)
 		fmt.Println("HDOP =>", hdop)
+		fmt.Println("user =>", user)
+		fmt.Println("session =>", session)
 		fmt.Println("key =>", key)
 	}
 
@@ -236,7 +268,24 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("hdop too big")
 		return
 	}
-
+	if user == "" {
+		user = "0"
+	} else if !isNumeric(user) {
+		fmt.Println("User not numeric")
+		return
+	} else if len(user) > AppConfig.MaxGetParmLen {
+		fmt.Println("User too big")
+		return
+	}
+	if session == "" {
+		session = "0"
+	} else if !isNumeric(session) {
+		fmt.Println("Session not numeric")
+		return
+	} else if len(session) > AppConfig.MaxGetParmLen {
+		fmt.Println("Session too big")
+		return
+	}
 	//data verification finish...
 
 	file, err := os.Create("./point.latest")
@@ -253,7 +302,9 @@ var circle = L.circle([%s, %s], {
 	fillOpacity: 0.3,
 	radius: %s
 }).addTo(map);`, lat, lon, hdop))
-		fmt.Printf("%d character written successfully into file (Precision).\n", len)
+		if AppConfig.ConsoleDebug {
+			fmt.Printf("%d character written successfully into file (Precision).\n", len)
+		}
 		if err != nil {
 			fmt.Println("Unable to write data:", err)
 		}
@@ -261,7 +312,9 @@ var circle = L.circle([%s, %s], {
 	if err != nil {
 		fmt.Println("Unable to write data:", err)
 	}
-	fmt.Printf("%d character written successfully into file.\n", len)
+	if AppConfig.ConsoleDebug {
+		fmt.Printf("%d character written successfully into file.\n", len)
+	}
 	file.Close()
 
 	w.WriteHeader(200)
@@ -273,10 +326,10 @@ var circle = L.circle([%s, %s], {
 	checkErr(db.Ping())
 	tx, err := db.Begin()
 	checkErr(err)
-	stmt, err := tx.Prepare("insert into Points(LAT, LON, ALT, SPEED, TIME, BEARING, HDOP) values(?, ?, ?, ?, ?, ?, ?)")
+	stmt, err := tx.Prepare("insert into Points(LAT, LON, ALT, SPEED, TIME, BEARING, HDOP, USER, SESSION) values(?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	checkErr(err)
 	defer stmt.Close()
-	_, err = stmt.Exec(lat, lon, altitude, speed, timestamp, bearing, hdop)
+	_, err = stmt.Exec(lat, lon, altitude, speed, timestamp, bearing, hdop, user, session)
 	checkErr(err)
 	tx.Commit()
 }
@@ -326,7 +379,7 @@ func CreateDB() {
 
 	// create table
 
-	_, err = db.Exec("create table Points (ID integer NOT NULL PRIMARY KEY AUTOINCREMENT, LAT string not null, LON string not null, ALT string not null, SPEED string not null, TIME string not null, BEARING string not null, HDOP string not null); delete from Points;")
+	_, err = db.Exec("create table Points (ID integer NOT NULL PRIMARY KEY AUTOINCREMENT, LAT string not null, LON string not null, ALT string not null, SPEED string not null, TIME string not null, BEARING string not null, HDOP string not null, USER string not null, SESSION string not null); delete from Points;")
 	checkErr(err)
 }
 
