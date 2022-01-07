@@ -1,7 +1,8 @@
 package main
 
 import (
-	"bufio"
+	"database/sql"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"text/template"
 	"time"
 
+	_ "github.com/mattn/go-sqlite3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,6 +40,7 @@ type Cfg struct {
 	MaxZoom            string `yaml:"MaxZoom"`
 	ConvertTimestamp   bool   `yaml:"ConvertTimestamp"`
 	TimeZone           string `yaml:"TimeZone"`
+	MaxShowPoint       string `yaml:"MaxShowPoint"`
 }
 
 var AppConfig Cfg
@@ -57,6 +60,9 @@ type Page struct {
 
 func main() {
 	ReadConfig()
+	if _, err := os.Stat("./sqlite-database.db"); errors.Is(err, os.ErrNotExist) {
+		CreateDB()
+	}
 	getAddPoint := http.HandlerFunc(getAddPoint)
 	http.Handle("/addpoint", getAddPoint)
 	getResetPoint := http.HandlerFunc(getResetPoint)
@@ -78,22 +84,33 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var latlonhistoryfromfile []string
+	var latlonhistoryfromDB []string
 
-	PointHistoryfile, err := os.Open("./point.history")
-	if err != nil {
-		fmt.Println(err)
+	db, err := sql.Open("sqlite3", "sqlite-database.db")
+	checkErr(err)
+	defer db.Close()
+	checkErr(db.Ping())
+	var limit string = ""
+	if AppConfig.MaxShowPoint != "0" {
+		limit = " LIMIT " + AppConfig.MaxShowPoint
 	}
-	defer PointHistoryfile.Close()
+	fmt.Println(limit)
+	rows, err := db.Query("SELECT lat, lon FROM Points ORDER BY ID DESC" + limit)
+	checkErr(err)
+	defer rows.Close()
 
-	PointHistoryscanner := bufio.NewScanner(PointHistoryfile)
-	for PointHistoryscanner.Scan() {
-		latlonhistoryfromfile = append(latlonhistoryfromfile, PointHistoryscanner.Text())
+	//5.1 Iterate through result set
+	for rows.Next() {
+		var latDB string
+		var lonDB string
+		err := rows.Scan(&latDB, &lonDB)
+		checkErr(err)
+		latlonhistoryfromDB = append(latlonhistoryfromDB, latDB+" ,"+lonDB)
 	}
 
-	if err := PointHistoryscanner.Err(); err != nil {
-		fmt.Println(err)
-	}
+	//5.2 check error, if any, that were encountered during iteration
+	err = rows.Err()
+	checkErr(err)
 
 	contents, err := ioutil.ReadFile("./point.latest")
 	if err != nil {
@@ -102,8 +119,8 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p := &Page{
-		Lastpos:         string(contents),      // data from file "./point.latest"
-		Latlonhistory:   latlonhistoryfromfile, // data from file "./point.history"
+		Lastpos:         string(contents),    // data from file "./point.latest"
+		Latlonhistory:   latlonhistoryfromDB, // data from DB
 		DefaultLat:      AppConfig.DefaultLat,
 		DefaultLon:      AppConfig.DefaultLon,
 		ShowOnlyLastPos: AppConfig.ShowOnlyLastPos,
@@ -127,15 +144,11 @@ func getResetPoint(w http.ResponseWriter, r *http.Request) {
 			fmt.Println(e)
 		}
 		latest.Close()
-		f := os.Remove("./point.history")
+		f := os.Remove("./sqlite-database.db")
 		if f != nil {
 			fmt.Println(f)
 		}
-		history, e := os.Create("./point.history")
-		if e != nil {
-			fmt.Println(e)
-		}
-		history.Close()
+		CreateDB()
 		w.WriteHeader(200)
 		w.Write([]byte("OK"))
 	}
@@ -254,16 +267,18 @@ var circle = L.circle([%s, %s], {
 	w.WriteHeader(200)
 	w.Write([]byte(lat + "," + lon + ","))
 
-	f, err := os.OpenFile("./point.history", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println(err)
-	}
-	if _, err := f.Write([]byte(lat + ", " + lon + "\n")); err != nil {
-		fmt.Println(err)
-	}
-	if err := f.Close(); err != nil {
-		fmt.Println(err)
-	}
+	db, err := sql.Open("sqlite3", "sqlite-database.db")
+	checkErr(err)
+	defer db.Close()
+	checkErr(db.Ping())
+	tx, err := db.Begin()
+	checkErr(err)
+	stmt, err := tx.Prepare("insert into Points(LAT, LON, ALT, SPEED, TIME, BEARING, HDOP) values(?, ?, ?, ?, ?, ?, ?)")
+	checkErr(err)
+	defer stmt.Close()
+	_, err = stmt.Exec(lat, lon, altitude, speed, timestamp, bearing, hdop)
+	checkErr(err)
+	tx.Commit()
 }
 
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
@@ -302,4 +317,22 @@ func TimeStampConvert(e string) (dtime time.Time) {
 	dtime = time.Unix(data/1000, 0).In(loc)
 	fmt.Println(dtime)
 	return
+}
+func CreateDB() {
+	db, err := sql.Open("sqlite3", "sqlite-database.db")
+	checkErr(err)
+	defer db.Close()
+	checkErr(db.Ping())
+
+	// create table
+
+	_, err = db.Exec("create table Points (ID integer NOT NULL PRIMARY KEY AUTOINCREMENT, LAT string not null, LON string not null, ALT string not null, SPEED string not null, TIME string not null, BEARING string not null, HDOP string not null); delete from Points;")
+	checkErr(err)
+}
+
+func checkErr(err error, args ...string) {
+	if err != nil {
+		fmt.Println("Error")
+		fmt.Println(err, " : ", args)
+	}
 }
