@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
@@ -139,15 +139,45 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	//5.2 check error, if any, that were encountered during iteration
 	err = rows.Err()
 	checkErr(err)
+	rowLastPos, err := db.Query("SELECT lat, lon, alt, speed, time, bearing, hdop FROM Points " + usrsession + " ORDER BY ID DESC LIMIT 1")
+	checkErr(err)
+	defer rowLastPos.Close()
+	//5.1 Iterate through result set
+	var temp *template.Template
+	var lastpos bytes.Buffer
+	for rowLastPos.Next() {
+		var latlast string
+		var lonlast string
+		var altlast string
+		var speedlast string
+		var timelast string
+		var beariglast string
+		var hdoplast string
+		err := rowLastPos.Scan(&latlast, &lonlast, &altlast, &speedlast, &timelast, &beariglast, &hdoplast)
+		checkErr(err)
+		if latlast != "" && lonlast != "" {
+			temp = template.Must(template.ParseFiles("./pages/LastPos.templ"))
+			type LasPosData struct {
+				Lat                 string
+				Lon                 string
+				Alt                 string
+				Speed               string
+				Time                string
+				Bearing             string
+				Hdop                string
+				ShowPrecisionCircle bool
+			}
+			pos := LasPosData{Lat: latlast, Lon: lonlast, Alt: altlast, Speed: speedlast, Time: timelast, Bearing: beariglast, Hdop: hdoplast, ShowPrecisionCircle: AppConfig.ShowPrecisonCircle}
+			err := temp.Execute(&lastpos, pos)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
 
-	contents, err := ioutil.ReadFile("./point.latest")
-	if err != nil {
-		fmt.Println(err.Error())
-		return
 	}
 
 	p := &Page{
-		Lastpos:         string(contents),    // data from file "./point.latest"
+		Lastpos:         lastpos.String(),    // data from DB
 		Latlonhistory:   latlonhistoryfromDB, // data from DB
 		DefaultLat:      AppConfig.DefaultLat,
 		DefaultLon:      AppConfig.DefaultLon,
@@ -163,15 +193,6 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 func getResetPoint(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
 	if key == AppConfig.Key {
-		e := os.Remove("./point.latest")
-		if e != nil {
-			fmt.Println(e)
-		}
-		latest, e := os.Create("./point.latest")
-		if e != nil {
-			fmt.Println(e)
-		}
-		latest.Close()
 		f := os.Remove("./sqlite-database.db")
 		if f != nil {
 			fmt.Println(f)
@@ -287,35 +308,6 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//data verification finish...
-
-	file, err := os.Create("./point.latest")
-	if err != nil {
-		fmt.Println("Unable to open file:", err)
-	}
-
-	len, err := file.WriteString(fmt.Sprintf("L.marker([%s,%s]).addTo(map).bindPopup('Lat: %s<br>Lon: %s<br>Altitude: %s<br>Speed: %s<br>Time: %s<br>Bearing: %s<br>HDOP: %s').openPopup();", lat, lon, lat, lon, altitude, speed, timestamp, bearing, hdop))
-	if AppConfig.ShowPrecisonCircle {
-		len, err := file.WriteString(fmt.Sprintf(`
-var circle = L.circle([%s, %s], {
-	color: 'blue',
-	fillColor: '#g03',
-	fillOpacity: 0.3,
-	radius: %s
-}).addTo(map);`, lat, lon, hdop))
-		if AppConfig.ConsoleDebug {
-			fmt.Printf("%d character written successfully into file (Precision).\n", len)
-		}
-		if err != nil {
-			fmt.Println("Unable to write data:", err)
-		}
-	}
-	if err != nil {
-		fmt.Println("Unable to write data:", err)
-	}
-	if AppConfig.ConsoleDebug {
-		fmt.Printf("%d character written successfully into file.\n", len)
-	}
-	file.Close()
 
 	w.WriteHeader(200)
 	w.Write([]byte(lat + "," + lon + ","))
