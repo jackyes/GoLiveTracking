@@ -69,6 +69,7 @@ func main() {
 	getResetPoint := http.HandlerFunc(getResetPoint)
 	http.Handle("/resetpoint", getResetPoint)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	http.HandleFunc("/favicon.ico", faviconHandler)
 	http.HandleFunc("/", http.HandlerFunc(IndexHandler))
 	if !AppConfig.DisableNoTLS {
 		http.ListenAndServe(":"+AppConfig.ServerPort, nil)
@@ -77,6 +78,10 @@ func main() {
 		err := http.ListenAndServeTLS(":"+AppConfig.ServerPortTLS, AppConfig.CertPathCrt, AppConfig.CertPathKey, nil)
 		fmt.Println(err)
 	}
+}
+
+func faviconHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "./static/favicon.ico")
 }
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
