@@ -21,27 +21,28 @@ var templates = template.Must(template.ParseFiles("pages/index.html"))
 
 // Declaration of struct needed for config.yaml
 type Cfg struct {
-	ServerPort          string `yaml:"ServerPort"`
-	ServerPortTLS       string `yaml:"ServerPortTLS"`
-	CertPathCrt         string `yaml:"CertPathCrt"`
-	CertPathKey         string `yaml:"CertPathKey"`
-	Key                 string `yaml:"Key"`
-	EnableTLS           bool   `yaml:"EnableTLS"`
-	DisableNoTLS        bool   `yaml:"DisableNoTLS"`
-	DefaultLat          string `yaml:"DefaultLat"`
-	DefaultLon          string `yaml:"DefaultLon"`
-	ShowOnlyLastPos     bool   `yaml:"ShowOnlyLastPos"`
-	MapRefreshTime      string `yaml:"MapRefreshTime"`
-	DefaultZoom         string `yaml:"DefaultZoom"`
-	ConsoleDebug        bool   `yaml:"ConsoleDebug"`
-	MaxGetParmLen       int    `yaml:"MaxGetParmLen"`
-	ShowPrecisonCircle  bool   `yaml:"ShowPrecisonCircle"`
-	MinZoom             string `yaml:"MinZoom"`
-	MaxZoom             string `yaml:"MaxZoom"`
-	ConvertTimestamp    bool   `yaml:"ConvertTimestamp"`
-	TimeZone            string `yaml:"TimeZone"`
-	MaxShowPoint        string `yaml:"MaxShowPoint"`
-	ShowMapOnlyWithUser bool   `yaml:"ShowMapOnlyWithUser"`
+	ServerPort              string `yaml:"ServerPort"`
+	ServerPortTLS           string `yaml:"ServerPortTLS"`
+	CertPathCrt             string `yaml:"CertPathCrt"`
+	CertPathKey             string `yaml:"CertPathKey"`
+	Key                     string `yaml:"Key"`
+	EnableTLS               bool   `yaml:"EnableTLS"`
+	DisableNoTLS            bool   `yaml:"DisableNoTLS"`
+	DefaultLat              string `yaml:"DefaultLat"`
+	DefaultLon              string `yaml:"DefaultLon"`
+	ShowOnlyLastPos         bool   `yaml:"ShowOnlyLastPos"`
+	MapRefreshTime          string `yaml:"MapRefreshTime"`
+	DefaultZoom             string `yaml:"DefaultZoom"`
+	ConsoleDebug            bool   `yaml:"ConsoleDebug"`
+	MaxGetParmLen           int    `yaml:"MaxGetParmLen"`
+	ShowPrecisonCircle      bool   `yaml:"ShowPrecisonCircle"`
+	MinZoom                 string `yaml:"MinZoom"`
+	MaxZoom                 string `yaml:"MaxZoom"`
+	ConvertTimestamp        bool   `yaml:"ConvertTimestamp"`
+	TimeZone                string `yaml:"TimeZone"`
+	MaxShowPoint            string `yaml:"MaxShowPoint"`
+	ShowMapOnlyWithUser     bool   `yaml:"ShowMapOnlyWithUser"`
+	AllowBypassMaxShowPoint bool   `yaml:"AllowBypassMaxShowPoint"`
 }
 
 var AppConfig Cfg
@@ -91,6 +92,7 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	user := r.URL.Query().Get("user")
 	session := r.URL.Query().Get("session")
+	maxshowpoint := r.URL.Query().Get("maxshowpoint")
 	if AppConfig.ShowMapOnlyWithUser == true && user == "" { //show only if user is provided
 		http.NotFound(w, r)
 		return
@@ -110,6 +112,10 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Session too big")
 		return
 	}
+	if AppConfig.AllowBypassMaxShowPoint == true && maxshowpoint != "" && (!isNumeric(maxshowpoint) || len(maxshowpoint) < AppConfig.MaxGetParmLen) {
+		fmt.Println("maxshowpoint not numeric or too big")
+		return
+	}
 
 	var latlonhistoryfromDB []string
 
@@ -120,6 +126,9 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	var limit string = ""
 	if AppConfig.MaxShowPoint != "0" {
 		limit = " LIMIT " + AppConfig.MaxShowPoint
+	}
+	if AppConfig.AllowBypassMaxShowPoint == true && maxshowpoint != "" {
+		limit = " LIMIT " + maxshowpoint
 	}
 	var usrsession string = ""
 	if user != "" {
