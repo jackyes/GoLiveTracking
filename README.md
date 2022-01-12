@@ -1,5 +1,5 @@
 AddPoint example:  
-http(s)://[address]:[port]/addpoint?lon=11.1475585&lat=44.1247882&timestamp=1639747127&altitude=11&speed=5&bearing=6&user=1&session=1&key=12345 
+http(s)://[address]:[port]/addpoint?lon=10.1&lat=45.1&timestamp=1639747127&altitude=11&speed=5&bearing=6&user=1&session=1&key=12345 
   
 Reset point history:  
 http(s)://[address]:[port]/resetpoint?key=12345   
