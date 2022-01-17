@@ -93,7 +93,7 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	user := r.URL.Query().Get("user")
 	session := r.URL.Query().Get("session")
 	maxshowpoint := r.URL.Query().Get("maxshowpoint")
-	if AppConfig.ShowMapOnlyWithUser == true && user == "" { //show only if user is provided
+	if AppConfig.ShowMapOnlyWithUser && user == "" { //show only if user is provided
 		http.NotFound(w, r)
 		return
 	}
@@ -112,7 +112,7 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Session too big")
 		return
 	}
-	if AppConfig.AllowBypassMaxShowPoint == true && maxshowpoint != "" && (!isNumeric(maxshowpoint) || len(maxshowpoint) < AppConfig.MaxGetParmLen) {
+	if AppConfig.AllowBypassMaxShowPoint && maxshowpoint != "" && (!isNumeric(maxshowpoint) || len(maxshowpoint) < AppConfig.MaxGetParmLen) {
 		fmt.Println("maxshowpoint not numeric or too big")
 		return
 	}
@@ -127,7 +127,7 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	if AppConfig.MaxShowPoint != "0" {
 		limit = " LIMIT " + AppConfig.MaxShowPoint
 	}
-	if AppConfig.AllowBypassMaxShowPoint == true && maxshowpoint != "" {
+	if AppConfig.AllowBypassMaxShowPoint && maxshowpoint != "" {
 		limit = " LIMIT " + maxshowpoint
 	}
 	var usrsession string = ""
