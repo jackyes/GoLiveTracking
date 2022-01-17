@@ -1,8 +1,13 @@
+Very simple Gps tracking viewer.  
+Use an Android app like OsmAnd (or a simple HTTP Get) to send data to the server:  
+  
 AddPoint example:  
-http(s)://[address]:[port]/addpoint?lon=10.1&lat=45.1&timestamp=1639747127&altitude=11&speed=5&bearing=6&user=1&session=1&key=12345 
+http(s)://[address]:[port]/addpoint?lon=[LON]&lat=[LAT]&timestamp=[UNIXTIMESTAMP]&altitude=[ALT]&speed=[SPEED]&bearing=[BEARING]&user=[USERNR]&session=[SESSIONNR]&key=[KEY]  
+OsmAnd: http(s)://[address]:[port]/addpoint?lat={0}&lon={1}&altitude={4}&acc={3}&timestamp={2}&speed={5}&bearing={6}&user=[USERNR]&session=[SESSIONNR]&key=[Key]  
+
   
 Reset point history:  
-http(s)://[address]:[port]/resetpoint?key=12345   
+http(s)://[address]:[port]/resetpoint?key=[KEY]   
   
 Map (example):  
 http(s)://[address]:[port]    #All point  
