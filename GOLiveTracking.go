@@ -112,7 +112,7 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Session too big")
 		return
 	}
-	if AppConfig.AllowBypassMaxShowPoint && maxshowpoint != "" && (!isNumeric(maxshowpoint) || len(maxshowpoint) < AppConfig.MaxGetParmLen) {
+	if AppConfig.AllowBypassMaxShowPoint && maxshowpoint != "" && !isNumeric(maxshowpoint) && len(maxshowpoint) < AppConfig.MaxGetParmLen {
 		fmt.Println("maxshowpoint not numeric or too big")
 		return
 	}
