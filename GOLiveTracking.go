@@ -254,16 +254,16 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if AppConfig.ConsoleDebug {
-		fmt.Println("lat =>", lat)
-		fmt.Println("lon =>", lon)
-		fmt.Println("timestamp =>", timestamp)
-		fmt.Println("altitude =>", altitude)
-		fmt.Println("speed =>", speed)
-		fmt.Println("bearing =>", bearing)
-		fmt.Println("HDOP =>", hdop)
-		fmt.Println("user =>", user)
-		fmt.Println("session =>", session)
-		fmt.Println("key =>", key)
+		fmt.Println("lat =>", strings.Replace(lat, "\n", "", -1))
+		fmt.Println("lon =>", strings.Replace(lon, "\n", "", -1))
+		fmt.Println("timestamp =>", strings.Replace(timestamp, "\n", "", -1))
+		fmt.Println("altitude =>", strings.Replace(altitude, "\n", "", -1))
+		fmt.Println("speed =>", strings.Replace(speed, "\n", "", -1))
+		fmt.Println("bearing =>", strings.Replace(bearing, "\n", "", -1))
+		fmt.Println("HDOP =>", strings.Replace(hdop, "\n", "", -1))
+		fmt.Println("user =>", strings.Replace(user, "\n", "", -1))
+		fmt.Println("session =>", strings.Replace(session, "\n", "", -1))
+		fmt.Println("key =>", strings.Replace(key, "\n", "", -1))
 	}
 
 	//data verification will happen here...
