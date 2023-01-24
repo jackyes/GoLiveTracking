@@ -76,7 +76,7 @@ func main() {
 
         mux := http.NewServeMux()
         mux.HandleFunc("/addpoint", func(w http.ResponseWriter, r *http.Request) { getAddPoint(w, r, db) })
-        mux.HandleFunc("/resetpoint", func(w http.ResponseWriter, r *http.Request) { getResetPoint(w, r, db) })
+        mux.HandleFunc("/resetpoint", func(w http.ResponseWriter, r *http.Request) { getResetPoint(w, r) })
         mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
         mux.HandleFunc("/favicon.ico", faviconHandler)
         mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { IndexHandler(w, r, db) })
@@ -248,13 +248,13 @@ func checkParam(param string, maxLen int) bool {
         return true
 }
 
-func getResetPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+func getResetPoint(w http.ResponseWriter, r *http.Request) {
         key := r.URL.Query().Get("key")
         if key != AppConfig.Key {
                 http.Error(w, "Unauthorized", http.StatusUnauthorized)
                 return
         }
-        db.Close()
+
         f := os.Remove("./sqlite-database.db")
         if f != nil {
                 fmt.Println(f)
@@ -431,6 +431,7 @@ func CreateDB() {
         // create table
         _, err = db.Exec("create table Points (ID integer NOT NULL PRIMARY KEY AUTOINCREMENT, LAT string not null, LON string not null, ALT string not null, SPEED string not null, TIME string not null, BEARING string not null, HDOP string not null, USER string not null, SESSION string not null); delete from Points;")
         checkErr(err)
+        //defer db.close()
 }
 
 func checkErr(err error, args ...string) {
