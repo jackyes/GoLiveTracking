@@ -3,11 +3,11 @@ package main
 import (
 	"bytes"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"text/template"
 	"time"
 
@@ -62,22 +62,33 @@ type Page struct {
 
 func main() {
 	ReadConfig()
-	if _, err := os.Stat("./sqlite-database.db"); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat("./sqlite-database.db"); os.IsNotExist(err) {
 		CreateDB()
 	}
-	getAddPoint := http.HandlerFunc(getAddPoint)
-	http.Handle("/addpoint", getAddPoint)
-	getResetPoint := http.HandlerFunc(getResetPoint)
-	http.Handle("/resetpoint", getResetPoint)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
-	http.HandleFunc("/favicon.ico", faviconHandler)
-	http.HandleFunc("/", http.HandlerFunc(IndexHandler))
+	db, err := sql.Open("sqlite3", "sqlite-database.db")
+	if err != nil {
+		checkErr(err)
+	}
+	defer db.Close()
+	if err = db.Ping(); err != nil {
+		checkErr(err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/addpoint", func(w http.ResponseWriter, r *http.Request) { getAddPoint(w, r, db) })
+	mux.HandleFunc("/resetpoint", getResetPoint)
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	mux.HandleFunc("/favicon.ico", faviconHandler)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { IndexHandler(w, r, db) })
+
 	if !AppConfig.DisableNoTLS {
-		http.ListenAndServe(":"+AppConfig.ServerPort, nil)
+		http.ListenAndServe(":"+AppConfig.ServerPort, mux)
 	}
 	if AppConfig.EnableTLS {
-		err := http.ListenAndServeTLS(":"+AppConfig.ServerPortTLS, AppConfig.CertPathCrt, AppConfig.CertPathKey, nil)
-		fmt.Println(err)
+		err := http.ListenAndServeTLS(":"+AppConfig.ServerPortTLS, AppConfig.CertPathCrt, AppConfig.CertPathKey, mux)
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 }
 
@@ -85,132 +96,135 @@ func faviconHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "./static/favicon.ico")
 }
 
-func IndexHandler(w http.ResponseWriter, r *http.Request) {
+func IndexHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
+	// Push assets if client supports it
 	if pusher, ok := w.(http.Pusher); ok {
-		// Push is supported.
-		if err := pusher.Push("/static/leaflet.css", nil); err != nil {
-			fmt.Println("Failed to push: ", err)
+		assets := []string{
+			"/static/leaflet.css",
+			"/static/leaflet.js",
+			"/static/images/layers.png",
+			"/static/images/marker-icon.png",
+			"/static/images/marker-shadow.png",
 		}
-		if err := pusher.Push("/static/leaflet.js", nil); err != nil {
-			fmt.Println("Failed to push: ", err)
-		}
-		if err := pusher.Push("/static/images/layers.png", nil); err != nil {
-			fmt.Println("Failed to push: ", err)
-		}
-		if err := pusher.Push("/static/images/marker-icon.png", nil); err != nil {
-			fmt.Println("Failed to push: ", err)
-		}
-		if err := pusher.Push("/static/images/marker-shadow.png", nil); err != nil {
-			fmt.Println("Failed to push: ", err)
+		for _, asset := range assets {
+			if err := pusher.Push(asset, nil); err != nil {
+				fmt.Println("Failed to push: ", err)
+			}
 		}
 	}
+	// Get query parameters
 	user := r.URL.Query().Get("user")
 	session := r.URL.Query().Get("session")
 	maxshowpoint := r.URL.Query().Get("maxshowpoint")
+
 	if AppConfig.ShowMapOnlyWithUser && user == "" { //show only if user is provided
 		http.NotFound(w, r)
 		return
 	}
 
-	if user != "" && !isNumeric(user) {
-		fmt.Println("User not numeric")
-		return
-	} else if len(user) > AppConfig.MaxGetParmLen {
-		fmt.Println("User too big")
+	if !checkParam(user, AppConfig.MaxGetParmLen) {
 		return
 	}
-	if session != "" && !isNumeric(session) {
-		fmt.Println("Session not numeric")
-		return
-	} else if len(session) > AppConfig.MaxGetParmLen {
-		fmt.Println("Session too big")
+	if !checkParam(session, AppConfig.MaxGetParmLen) {
 		return
 	}
-	if AppConfig.AllowBypassMaxShowPoint && maxshowpoint != "" && !isNumeric(maxshowpoint) || len(maxshowpoint) >= AppConfig.MaxGetParmLen {
-		fmt.Println("maxshowpoint not numeric or too big")
+	if !checkParam(maxshowpoint, AppConfig.MaxGetParmLen) && !AppConfig.AllowBypassMaxShowPoint {
 		return
 	}
 
 	var latlonhistoryfromDB []string
 
-	db, err := sql.Open("sqlite3", "sqlite-database.db")
-	checkErr(err)
-	defer db.Close()
-	checkErr(db.Ping())
-	var limit string = ""
-	if AppConfig.MaxShowPoint != "0" {
-		limit = " LIMIT " + AppConfig.MaxShowPoint
-	}
+	var limit string
 	if AppConfig.AllowBypassMaxShowPoint && maxshowpoint != "" {
 		limit = " LIMIT " + maxshowpoint
+	} else if AppConfig.MaxShowPoint != "0" {
+		limit = " LIMIT " + AppConfig.MaxShowPoint
 	}
-	var usrsession string = ""
+	var usrsession string
 	if user != "" {
 		usrsession = " WHERE user=" + user
 		if session != "" {
-			usrsession = " WHERE user=" + user + " AND session=" + session
+			usrsession += " AND session=" + session
 		}
 	}
-	rows, err := db.Query("SELECT lat, lon FROM Points " + usrsession + " ORDER BY ID DESC" + limit)
-	checkErr(err)
+	type Point struct {
+		Lat     string
+		Lon     string
+		Alt     string
+		Speed   string
+		Time    string
+		Bearing string
+		Hdop    string
+	}
+
+	query := `
+		SELECT lat, lon, alt, speed, time, bearing, hdop
+		FROM Points ` + usrsession + `
+		ORDER BY ID DESC 
+		` + limit
+
+	rows, err := db.Query(query)
+	if err != nil {
+		checkErr(err)
+	}
 	defer rows.Close()
 
-	//5.1 Iterate through result set
+	points := make([]Point, 0)
+
 	for rows.Next() {
-		var latDB string
-		var lonDB string
-		err := rows.Scan(&latDB, &lonDB)
-		checkErr(err)
-		latlonhistoryfromDB = append(latlonhistoryfromDB, latDB+" ,"+lonDB)
+		var point Point
+		if err := rows.Scan(&point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop); err != nil {
+			checkErr(err)
+		}
+		points = append(points, point)
 	}
 
-	//5.2 check error, if any, that were encountered during iteration
-	err = rows.Err()
-	checkErr(err)
-	rowLastPos, err := db.Query("SELECT lat, lon, alt, speed, time, bearing, hdop FROM Points " + usrsession + " ORDER BY ID DESC LIMIT 1")
-	checkErr(err)
-	defer rowLastPos.Close()
-	//5.1 Iterate through result set
-	var temp *template.Template
-	var lastpos bytes.Buffer
-	for rowLastPos.Next() {
-		var latlast string
-		var lonlast string
-		var altlast string
-		var speedlast string
-		var timelast string
-		var beariglast string
-		var hdoplast string
-		err := rowLastPos.Scan(&latlast, &lonlast, &altlast, &speedlast, &timelast, &beariglast, &hdoplast)
+	if err := rows.Err(); err != nil {
 		checkErr(err)
-		if latlast != "" && lonlast != "" {
-			temp = template.Must(template.ParseFiles("./pages/LastPos.templ"))
-			type LasPosData struct {
-				Lat                 string
-				Lon                 string
-				Alt                 string
-				Speed               string
-				Time                string
-				Bearing             string
-				Hdop                string
-				ShowPrecisionCircle bool
-			}
-			pos := LasPosData{Lat: latlast, Lon: lonlast, Alt: altlast, Speed: speedlast, Time: timelast, Bearing: beariglast, Hdop: hdoplast, ShowPrecisionCircle: AppConfig.ShowPrecisonCircle}
-			err := temp.Execute(&lastpos, pos)
-			if err != nil {
-				fmt.Println(err)
-			}
-		}
+	}
 
+	var lastpos bytes.Buffer
+
+	if len(points) > 0 {
+		var lastPoint Point
+		lastPoint = points[0]
+		temp := template.Must(template.ParseFiles("./pages/LastPos.templ"))
+		type LasPosData struct {
+			Lat                 string
+			Lon                 string
+			Alt                 string
+			Speed               string
+			Time                string
+			Bearing             string
+			Hdop                string
+			ShowPrecisionCircle bool
+		}
+		pos := LasPosData{
+			Lat:                 lastPoint.Lat,
+			Lon:                 lastPoint.Lon,
+			Alt:                 lastPoint.Alt,
+			Speed:               lastPoint.Speed,
+			Time:                lastPoint.Time,
+			Bearing:             lastPoint.Bearing,
+			Hdop:                lastPoint.Hdop,
+			ShowPrecisionCircle: AppConfig.ShowPrecisonCircle,
+		}
+		if err := temp.Execute(&lastpos, pos); err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	for _, point := range points {
+		latlonhistoryfromDB = append(latlonhistoryfromDB, point.Lat+","+point.Lon)
 	}
 
 	p := &Page{
-		Lastpos:         lastpos.String(),    // data from DB
-		Latlonhistory:   latlonhistoryfromDB, // data from DB
+		Lastpos:         lastpos.String(),
+		Latlonhistory:   latlonhistoryfromDB,
 		DefaultLat:      AppConfig.DefaultLat,
 		DefaultLon:      AppConfig.DefaultLon,
 		ShowOnlyLastPos: AppConfig.ShowOnlyLastPos,
@@ -219,23 +233,38 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 		MinZoom:         AppConfig.MinZoom,
 		MaxZoom:         AppConfig.MaxZoom,
 	}
+
 	renderTemplate(w, "index", p)
+}
+
+func checkParam(param string, maxLen int) bool {
+	if param != "" && !isNumeric(param) {
+		fmt.Println(param + " not numeric")
+		return false
+	} else if len(param) > maxLen {
+		fmt.Println(param + " too big")
+		return false
+	}
+	return true
 }
 
 func getResetPoint(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
-	if key == AppConfig.Key {
-		f := os.Remove("./sqlite-database.db")
-		if f != nil {
-			fmt.Println(f)
-		}
-		CreateDB()
-		w.WriteHeader(200)
-		w.Write([]byte("OK"))
+	if key != AppConfig.Key {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
 	}
+
+	f := os.Remove("./sqlite-database.db")
+	if f != nil {
+		fmt.Println(f)
+	}
+	CreateDB()
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
 
-func getAddPoint(w http.ResponseWriter, r *http.Request) {
+func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 	lat := r.URL.Query().Get("lat")
 	lon := r.URL.Query().Get("lon")
@@ -341,13 +370,9 @@ func getAddPoint(w http.ResponseWriter, r *http.Request) {
 	}
 	//data verification finish...
 
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(lat + "," + lon + ","))
 
-	db, err := sql.Open("sqlite3", "sqlite-database.db")
-	checkErr(err)
-	defer db.Close()
-	checkErr(db.Ping())
 	tx, err := db.Begin()
 	checkErr(err)
 	stmt, err := tx.Prepare("insert into Points(LAT, LON, ALT, SPEED, TIME, BEARING, HDOP, USER, SESSION) values(?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -390,11 +415,15 @@ func TimeStampConvert(e string) (dtime time.Time) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	loc, _ := time.LoadLocation(AppConfig.TimeZone)
+	loc, err := time.LoadLocation(AppConfig.TimeZone)
+	if err != nil {
+		fmt.Println(err)
+	}
 	dtime = time.Unix(data/1000, 0).In(loc)
 	fmt.Println(dtime)
-	return
+	return dtime
 }
+
 func CreateDB() {
 	db, err := sql.Open("sqlite3", "sqlite-database.db")
 	checkErr(err)
