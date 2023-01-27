@@ -239,10 +239,10 @@ func IndexHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 func checkParam(param string, maxLen int) bool {
 	if param != "" && !isNumeric(param) {
-		fmt.Println(param + " not numeric")
+		fmt.Println(strings.Replace(param, "\n", "", -1) + " not numeric")
 		return false
 	} else if len(param) > maxLen {
-		fmt.Println(param + " too big")
+		fmt.Println(strings.Replace(param, "\n", "", -1) + " too big")
 		return false
 	}
 	return true
