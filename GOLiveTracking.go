@@ -190,8 +190,7 @@ func IndexHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	var lastpos bytes.Buffer
 
 	if len(points) > 0 {
-		var lastPoint Point
-		lastPoint = points[0]
+		lastPoint := points[0]
 		temp := template.Must(template.ParseFiles("./pages/LastPos.templ"))
 		type LasPosData struct {
 			Lat                 string
