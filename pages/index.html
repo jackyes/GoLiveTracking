@@ -11,11 +11,26 @@
    </head>
    <body>
       <div style="display: flex; justify-content: center;">
-         <button id="stopUpdates">Stop Live Tracking</button>
+         <button onclick="stopLT()">Stop Live Tracking</button>
          <button onclick="location.reload()">Resume Live Tracking</button>
       </div>
          <div id="map"></div>
       <script type="text/javascript">
+
+function getParameterByName(name, url) {
+  if (!url) url = window.location.href;
+  name = name.replace(/[\[\]]/g, '\\$&');
+  var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+      results = regex.exec(url);
+  if (!results) return null;
+  if (!results[2]) return '';
+  return decodeURIComponent(results[2].replace(/\+/g, ' '));
+}
+
+         function stopLT(){
+            source.close();
+         }
+
          // initialize the map
          var map = L.map('map').setView([{{.DefaultLat}}, {{.DefaultLon}}], {{.DefaultZoom}});
          L.control.scale().addTo(map)
@@ -30,12 +45,6 @@
          GoogleSat: L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{attribution: '&copy; GoogleMap', maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3']}),
          GoogleTerrain: L.tileLayer('http://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',{attribution: '&copy; GoogleMap', maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3']}),
          };
-
-         document.getElementById("stopUpdates").addEventListener("click", function() {
-         if (source) {
-            source.close();
-         }
-         });
 
          var overlay = {
          HikingTrails: L.tileLayer('https://tile.waymarkedtrails.org/{id}/{z}/{x}/{y}.png',{id: 'hiking', attribution: '&copy; <a href="http://waymarkedtrails.org">Sarah Hoffmann<\/a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA<\/a>)'}),
@@ -57,7 +66,9 @@
          map.fitBounds(polyline.getBounds());
          {{end}}
          {{.Lastpos}}
-         var source = new EventSource("/events");
+         var user = getParameterByName('user'); // get the value of the 'user' variable from the query string
+         var session = getParameterByName('session'); // get the value of the 'session' variable from the query string
+         var source = new EventSource("/events?user=" + user + "&session=" + session)
          source.addEventListener("location", function(event) {
          var data = JSON.parse(event.data);
          markerGroup.clearLayers();
@@ -74,6 +85,6 @@
          }).addTo(markerGroup);
          });
          {{end}}
-      </script>   
+      </script>
    </body>
 </html>
