@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"text/template"
@@ -60,6 +61,7 @@ type Cfg struct {
 }
 
 var AppConfig Cfg
+var safeString   = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 
 // need for HTML SSE
 type LatLng struct {
@@ -155,13 +157,13 @@ func IndexHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	if !checkParam(user, AppConfig.MaxGetParmLen) {
+	if !checkParam(user, AppConfig.MaxGetParmLen) || !isSafeString(user) {
 		return
 	}
-	if !checkParam(session, AppConfig.MaxGetParmLen) {
+	if !checkParam(session, AppConfig.MaxGetParmLen) || !isSafeString(session) {
 		return
 	}
-	if !checkParam(maxshowpoint, AppConfig.MaxGetParmLen) && !AppConfig.AllowBypassMaxShowPoint {
+	if !isSafeString(maxshowpoint) || !checkParam(maxshowpoint, AppConfig.MaxGetParmLen) && !AppConfig.AllowBypassMaxShowPoint {
 		return
 	}
 
@@ -474,6 +476,13 @@ func TimeStampConvert(e string) (dtime time.Time) {
 	dtime = time.Unix(data/1000, 0).In(loc)
 	fmt.Println(dtime)
 	return dtime
+}
+
+func isSafeString(str string) bool {
+	if str == "" {
+		return true
+	}
+	return safeString.MatchString(str)
 }
 
 func CreateDB() {
