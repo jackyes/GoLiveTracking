@@ -57,11 +57,11 @@ type Cfg struct {
 	MaxShowPoint            string `yaml:"MaxShowPoint"`
 	ShowMapOnlyWithUser     bool   `yaml:"ShowMapOnlyWithUser"`
 	AllowBypassMaxShowPoint bool   `yaml:"AllowBypassMaxShowPoint"`
-	EventRefrehTime         string    `yaml:"EventRefrehTime"`
+	EventRefrehTime         string `yaml:"EventRefrehTime"`
 }
 
 var AppConfig Cfg
-var safeString   = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+var safeString = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 
 // need for HTML SSE
 type LatLng struct {
@@ -384,56 +384,85 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 }
 
 func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	user := r.URL.Query().Get("user")
+	session := r.URL.Query().Get("session")
+	if user == "null" {
+		user = "0"
+	} else if !isNumeric(user) {
+		fmt.Println("User not numeric")
+		return
+	} else if len(user) > AppConfig.MaxGetParmLen {
+		fmt.Println("User too big")
+		return
+	}
+	if session == "null" {
+		session = "0"
+	} else if !isNumeric(session) {
+		fmt.Println("Session not numeric")
+		return
+	} else if len(session) > AppConfig.MaxGetParmLen {
+		fmt.Println("Session too big")
+		return
+	}
 	// Set the HTTP response header
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
+	notify := w.(http.CloseNotifier).CloseNotify()
 
-	// Infinite loop to retrieve the last position from the database every 15 seconds.
+	// Infinite loop to retrieve the last position from the database every X seconds.
 	for {
-		// Execute the query to retrieve the last position from the database
-		rows, err := db.Query("SELECT * FROM Points ORDER BY ID DESC LIMIT 1")
-		checkErr(err)
-		defer rows.Close()
+		select {
+		case <-notify:
+			return
+		default:
+			where := ""
+			if (user != "0") && (session != "0") {
+				where = "WHERE USER = " + user + " AND SESSION = " + session
+			}
+			query := "SELECT * FROM Points " + where + " ORDER BY ID DESC LIMIT 1"
+			rows, err := db.Query(query, user, session)
+			defer rows.Close()
 
-		var point Point
-		for rows.Next() {
-			// Scan the row and store the last position in the "point" variable
-			err := rows.Scan(&point.ID, &point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop, &point.User, &point.Session)
+			var point Point
+			for rows.Next() {
+				// Scan the row and store the last position in the "point" variable
+				err := rows.Scan(&point.ID, &point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop, &point.User, &point.Session)
+				checkErr(err)
+			}
+			err = rows.Err()
 			checkErr(err)
+
+			// Create a LatLng object with the position data
+			location := LatLng{
+				User:    point.User,
+				Session: point.Session,
+				Lat:     point.Lat,
+				Lng:     point.Lon,
+				Alt:     point.Alt,
+				Speed:   point.Speed,
+				Time:    point.Time,
+				Bear:    point.Bearing,
+				Hdop:    point.Hdop,
+			}
+
+			// Encode the LatLng object into JSON format
+			data, err := json.Marshal(location)
+			checkErr(err)
+
+			// Send the "location" event with the position data
+			fmt.Fprintf(w, "event: location\ndata: %s\n\n", data)
+			w.(http.Flusher).Flush()
+
+			// Wait for AppConfig.EventRefrehTime before retrieving the position from the database again.
+			d, err := time.ParseDuration(AppConfig.EventRefrehTime)
+			if err != nil {
+				fmt.Println("Error parsing EventRefrehTime from config.yaml. Using default value (15s)", err)
+				d = 15 * time.Second
+			}
+			time.Sleep(d)
 		}
-		err = rows.Err()
-		checkErr(err)
-
-		// Create a LatLng object with the position data
-		location := LatLng{
-			User:    point.User,
-			Session: point.Session,
-			Lat:     point.Lat,
-			Lng:     point.Lon,
-			Alt:     point.Alt,
-			Speed:   point.Speed,
-			Time:    point.Time,
-			Bear:    point.Bearing,
-			Hdop:    point.Hdop,
-		}
-
-		// Encode the LatLng object into JSON format
-		data, err := json.Marshal(location)
-		checkErr(err)
-
-		// Send the "location" event with the position data
-		fmt.Fprintf(w, "event: location\ndata: %s\n\n", data)
-		w.(http.Flusher).Flush()
-
-		// Wait for AppConfig.EventRefrehTime before retrieving the position from the database again.
-		d, err := time.ParseDuration(AppConfig.EventRefrehTime)
-        if err != nil {
-                fmt.Println("Error parsing EventRefrehTime from config.yaml. Using default value (15s)", err)
-                d = 15 * time.Second
-        }
-		time.Sleep(d)
 	}
 }
 
