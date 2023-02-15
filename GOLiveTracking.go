@@ -369,7 +369,7 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	//data verification finish...
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(lat + "," + lon + ","))
+	w.Write([]byte("OK"))
 
 	tx, err := db.Begin()
 	checkErr(err)
