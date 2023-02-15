@@ -9,7 +9,7 @@ DefaultLat: "44.0" #Default LAT position if no track present
 DefaultLon: "10.0" #Default LON position if no track present
 DefaultZoom: 16 #Zoom level when map is open/refreshed
 ShowOnlyLastPos: false #Show only the last position marker on map, ignore history
-MapRefreshTime: 360 #Map refresh time interval in seconds
+MapRefreshTime: 600 #Map refresh time interval in seconds
 ConsoleDebug: false
 MaxGetParmLen: 15  #Max lenght of parameters (LAT,LON,altitude,ecc)
 ShowPrecisonCircle: true  #Shows a circle that reflects GPS accuracy
@@ -20,3 +20,4 @@ TimeZone: "Europe/Rome"   #Use value from:https://en.wikipedia.org/wiki/List_of_
 MaxShowPoint: 0     # 0 for all, set te number of max track point
 ShowMapOnlyWithUser: false  #Show map only if user is passed as get parameter
 AllowBypassMaxShowPoint: true   #consent to bypass the MaxShowPoint limit using &maxshowpoint=X in GET parm
+EventRefrehTime: 5 #get update every x second
