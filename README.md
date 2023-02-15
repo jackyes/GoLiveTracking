@@ -1,4 +1,4 @@
-# Very simple Gps tracking viewer written in GO.  
+# Very simple Live Gps tracking viewer written in GO.  
 Use an app like OsmAnd (or a simple HTTP Get) to send data to the server:  
   
 ## AddPoint example:  
