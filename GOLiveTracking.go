@@ -422,7 +422,7 @@ func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 				where = "WHERE USER = " + user + " AND SESSION = " + session
 			}
 			query := "SELECT * FROM Points " + where + " ORDER BY ID DESC LIMIT 1"
-			rows, err := db.Query(query, user, session)
+			rows, err := db.Query(query)
 			defer rows.Close()
 
 			var point Point
