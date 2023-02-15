@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -19,6 +20,18 @@ const configPath = "./config.yaml"
 
 var templates = template.Must(template.ParseFiles("pages/index.html"))
 
+type Point struct {
+	ID      int
+	Lat     string
+	Lon     string
+	Alt     string
+	Speed   string
+	Time    string
+	Bearing string
+	Hdop    string
+	User    string
+	Session string
+}
 // Declaration of struct needed for config.yaml
 type Cfg struct {
 	ServerPort              string `yaml:"ServerPort"`
@@ -46,6 +59,19 @@ type Cfg struct {
 }
 
 var AppConfig Cfg
+
+//need for HTML SSE
+type LatLng struct {
+	User string	`json:"user"`
+	Session string `json:"session"`
+	Lat string `json:"lat"`
+	Lng string `json:"lng"`
+	Alt string	`json:"alt"`
+	Speed string `json:"speed"`
+	Time string `json:"time"`
+	Bear string `json:"bear"`
+	Hdop string `json:"hdop"`
+}
 
 // Declaration of struct needed for the template
 type Page struct {
@@ -78,6 +104,7 @@ func main() {
 	mux.HandleFunc("/addpoint", func(w http.ResponseWriter, r *http.Request) { getAddPoint(w, r, db) })
 	mux.HandleFunc("/resetpoint", func(w http.ResponseWriter, r *http.Request) { getResetPoint(w, r, db) })
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) { eventsHandler(w, r ,db) })
 	mux.HandleFunc("/favicon.ico", faviconHandler)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { IndexHandler(w, r, db) })
 
@@ -164,7 +191,7 @@ func IndexHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	query := `
                 SELECT lat, lon, alt, speed, time, bearing, hdop
                 FROM Points ` + usrsession + `
-                ORDER BY ID DESC
+                ORDER BY ID ASC
                 ` + limit
 
 	rows, err := db.Query(query)
@@ -381,6 +408,56 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	checkErr(err)
 	tx.Commit()
 }
+
+func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+    // Set the HTTP response header
+    w.Header().Set("Content-Type", "text/event-stream")
+    w.Header().Set("Cache-Control", "no-cache")
+    w.Header().Set("Connection", "keep-alive")
+    w.WriteHeader(http.StatusOK)
+
+    // Infinite loop to retrieve the last position from the database every 15 seconds.
+    for {
+        // Execute the query to retrieve the last position from the database
+        rows, err := db.Query("SELECT * FROM Points ORDER BY ID DESC LIMIT 1")
+        checkErr(err)
+        defer rows.Close()
+
+        var point Point
+        for rows.Next() {
+            // Scan the row and store the last position in the "point" variable
+            err := rows.Scan(&point.ID, &point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop, &point.User, &point.Session)
+            checkErr(err)
+        }
+        err = rows.Err()
+        checkErr(err)
+
+        // Create a LatLng object with the position data
+        location := LatLng{
+			User: point.User,
+			Session: point.Session,
+            Lat: point.Lat,
+            Lng: point.Lon,
+			Alt: point.Alt,
+			Speed: point.Speed,
+			Time: point.Time,
+			Bear: point.Bearing,
+			Hdop: point.Hdop,
+        }
+
+        // Encode the LatLng object into JSON format
+        data, err := json.Marshal(location)
+        checkErr(err)
+
+        // Send the "location" event with the position data
+        fmt.Fprintf(w, "event: location\ndata: %s\n\n", data)
+        w.(http.Flusher).Flush()
+
+        // Wait for 15 seconds before retrieving the position from the database again.
+        time.Sleep(15 * time.Second)
+    }
+}
+
 
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 	err := templates.ExecuteTemplate(w, tmpl+".html", p)
