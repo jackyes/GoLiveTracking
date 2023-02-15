@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -32,6 +31,7 @@ type Point struct {
 	User    string
 	Session string
 }
+
 // Declaration of struct needed for config.yaml
 type Cfg struct {
 	ServerPort              string `yaml:"ServerPort"`
@@ -56,34 +56,36 @@ type Cfg struct {
 	MaxShowPoint            string `yaml:"MaxShowPoint"`
 	ShowMapOnlyWithUser     bool   `yaml:"ShowMapOnlyWithUser"`
 	AllowBypassMaxShowPoint bool   `yaml:"AllowBypassMaxShowPoint"`
+	EventRefrehTime         string    `yaml:"EventRefrehTime"`
 }
 
 var AppConfig Cfg
 
-//need for HTML SSE
+// need for HTML SSE
 type LatLng struct {
-	User string	`json:"user"`
+	User    string `json:"user"`
 	Session string `json:"session"`
-	Lat string `json:"lat"`
-	Lng string `json:"lng"`
-	Alt string	`json:"alt"`
-	Speed string `json:"speed"`
-	Time string `json:"time"`
-	Bear string `json:"bear"`
-	Hdop string `json:"hdop"`
+	Lat     string `json:"lat"`
+	Lng     string `json:"lng"`
+	Alt     string `json:"alt"`
+	Speed   string `json:"speed"`
+	Time    string `json:"time"`
+	Bear    string `json:"bear"`
+	Hdop    string `json:"hdop"`
 }
 
 // Declaration of struct needed for the template
 type Page struct {
-	Lastpos         string
-	Latlonhistory   []string
-	DefaultLat      string
-	DefaultLon      string
-	ShowOnlyLastPos bool
-	MapRefreshTime  string
-	DefaultZoom     string
-	MinZoom         string
-	MaxZoom         string
+	Lastpos            string
+	Latlonhistory      []string
+	DefaultLat         string
+	DefaultLon         string
+	ShowOnlyLastPos    bool
+	MapRefreshTime     string
+	DefaultZoom        string
+	MinZoom            string
+	MaxZoom            string
+	ShowPrecisonCircle bool
 }
 
 func main() {
@@ -104,7 +106,7 @@ func main() {
 	mux.HandleFunc("/addpoint", func(w http.ResponseWriter, r *http.Request) { getAddPoint(w, r, db) })
 	mux.HandleFunc("/resetpoint", func(w http.ResponseWriter, r *http.Request) { getResetPoint(w, r, db) })
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
-	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) { eventsHandler(w, r ,db) })
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) { eventsHandler(w, r, db) })
 	mux.HandleFunc("/favicon.ico", faviconHandler)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { IndexHandler(w, r, db) })
 
@@ -214,50 +216,20 @@ func IndexHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		checkErr(err)
 	}
 
-	var lastpos bytes.Buffer
-
-	if len(points) > 0 {
-		lastPoint := points[0]
-		temp := template.Must(template.ParseFiles("./pages/LastPos.templ"))
-		type LasPosData struct {
-			Lat                 string
-			Lon                 string
-			Alt                 string
-			Speed               string
-			Time                string
-			Bearing             string
-			Hdop                string
-			ShowPrecisionCircle bool
-		}
-		pos := LasPosData{
-			Lat:                 lastPoint.Lat,
-			Lon:                 lastPoint.Lon,
-			Alt:                 lastPoint.Alt,
-			Speed:               lastPoint.Speed,
-			Time:                lastPoint.Time,
-			Bearing:             lastPoint.Bearing,
-			Hdop:                lastPoint.Hdop,
-			ShowPrecisionCircle: AppConfig.ShowPrecisonCircle,
-		}
-		if err := temp.Execute(&lastpos, pos); err != nil {
-			fmt.Println(err)
-		}
-	}
-
 	for _, point := range points {
 		latlonhistoryfromDB = append(latlonhistoryfromDB, point.Lat+","+point.Lon)
 	}
 
 	p := &Page{
-		Lastpos:         lastpos.String(),
-		Latlonhistory:   latlonhistoryfromDB,
-		DefaultLat:      AppConfig.DefaultLat,
-		DefaultLon:      AppConfig.DefaultLon,
-		ShowOnlyLastPos: AppConfig.ShowOnlyLastPos,
-		MapRefreshTime:  AppConfig.MapRefreshTime,
-		DefaultZoom:     AppConfig.DefaultZoom,
-		MinZoom:         AppConfig.MinZoom,
-		MaxZoom:         AppConfig.MaxZoom,
+		Latlonhistory:      latlonhistoryfromDB,
+		DefaultLat:         AppConfig.DefaultLat,
+		DefaultLon:         AppConfig.DefaultLon,
+		ShowOnlyLastPos:    AppConfig.ShowOnlyLastPos,
+		MapRefreshTime:     AppConfig.MapRefreshTime,
+		DefaultZoom:        AppConfig.DefaultZoom,
+		MinZoom:            AppConfig.MinZoom,
+		MaxZoom:            AppConfig.MaxZoom,
+		ShowPrecisonCircle: AppConfig.ShowPrecisonCircle,
 	}
 
 	renderTemplate(w, "index", p)
@@ -410,54 +382,58 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 }
 
 func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-    // Set the HTTP response header
-    w.Header().Set("Content-Type", "text/event-stream")
-    w.Header().Set("Cache-Control", "no-cache")
-    w.Header().Set("Connection", "keep-alive")
-    w.WriteHeader(http.StatusOK)
+	// Set the HTTP response header
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
 
-    // Infinite loop to retrieve the last position from the database every 15 seconds.
-    for {
-        // Execute the query to retrieve the last position from the database
-        rows, err := db.Query("SELECT * FROM Points ORDER BY ID DESC LIMIT 1")
-        checkErr(err)
-        defer rows.Close()
+	// Infinite loop to retrieve the last position from the database every 15 seconds.
+	for {
+		// Execute the query to retrieve the last position from the database
+		rows, err := db.Query("SELECT * FROM Points ORDER BY ID DESC LIMIT 1")
+		checkErr(err)
+		defer rows.Close()
 
-        var point Point
-        for rows.Next() {
-            // Scan the row and store the last position in the "point" variable
-            err := rows.Scan(&point.ID, &point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop, &point.User, &point.Session)
-            checkErr(err)
-        }
-        err = rows.Err()
-        checkErr(err)
+		var point Point
+		for rows.Next() {
+			// Scan the row and store the last position in the "point" variable
+			err := rows.Scan(&point.ID, &point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop, &point.User, &point.Session)
+			checkErr(err)
+		}
+		err = rows.Err()
+		checkErr(err)
 
-        // Create a LatLng object with the position data
-        location := LatLng{
-			User: point.User,
+		// Create a LatLng object with the position data
+		location := LatLng{
+			User:    point.User,
 			Session: point.Session,
-            Lat: point.Lat,
-            Lng: point.Lon,
-			Alt: point.Alt,
-			Speed: point.Speed,
-			Time: point.Time,
-			Bear: point.Bearing,
-			Hdop: point.Hdop,
+			Lat:     point.Lat,
+			Lng:     point.Lon,
+			Alt:     point.Alt,
+			Speed:   point.Speed,
+			Time:    point.Time,
+			Bear:    point.Bearing,
+			Hdop:    point.Hdop,
+		}
+
+		// Encode the LatLng object into JSON format
+		data, err := json.Marshal(location)
+		checkErr(err)
+
+		// Send the "location" event with the position data
+		fmt.Fprintf(w, "event: location\ndata: %s\n\n", data)
+		w.(http.Flusher).Flush()
+
+		// Wait for AppConfig.EventRefrehTime before retrieving the position from the database again.
+		d, err := time.ParseDuration(AppConfig.EventRefrehTime)
+        if err != nil {
+                fmt.Println("Error parsing EventRefrehTime from config.yaml. Using default value (15s)", err)
+                d = 15 * time.Second
         }
-
-        // Encode the LatLng object into JSON format
-        data, err := json.Marshal(location)
-        checkErr(err)
-
-        // Send the "location" event with the position data
-        fmt.Fprintf(w, "event: location\ndata: %s\n\n", data)
-        w.(http.Flusher).Flush()
-
-        // Wait for 15 seconds before retrieving the position from the database again.
-        time.Sleep(15 * time.Second)
-    }
+		time.Sleep(d)
+	}
 }
-
 
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 	err := templates.ExecuteTemplate(w, tmpl+".html", p)
