@@ -1,8 +1,8 @@
-module learn
+module GoLiveTracking
 
-go 1.17
+go 1.20
 
 require (
-	github.com/mattn/go-sqlite3 v1.14.10
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+        github.com/mattn/go-sqlite3 v1.14.16
+        gopkg.in/yaml.v3 v3.0.1
 )
