@@ -1,12 +1,13 @@
-FROM golang:1.20.1-bullseye as builder
+FROM golang:alpine AS builder
 WORKDIR /app
 COPY . .
+RUN apk update && apk add git gcc build-base
 RUN go mod download
-RUN go build GOLiveTracking.go
-FROM debian:stable-slim
-ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get upgrade && rm -rf /var/lib/apt/lists/*
+RUN  CGO_ENABLED=1 go build -o GOLiveTracking .
+FROM alpine:latest
+RUN apk update && apk upgrade && rm -rf /var/cache/*
+WORKDIR /root/
 COPY . .
-COPY --from=builder /app/GOLiveTracking /app/GOLiveTracking
+COPY --from=builder /app/GOLiveTracking .
 EXPOSE 8080
-CMD ["./app/GOLiveTracking"]
+CMD ["./GOLiveTracking"]
