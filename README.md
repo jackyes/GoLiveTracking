@@ -18,7 +18,36 @@ Build and run the program:
 ```
 go run main.go
 ```  
+    
+## Docker  
 
+It is possible to use an image on Docker Hub with the following command:
+
+    docker run -p 8080:8080 --name golivetracking -v /home/user/config.yaml:/config.yaml jackyes/golivetracking 
+    
+`/home/user/config.yaml` is the path to your config.yaml file (copy and edit the one in this repository).  
+change the default port 8080 accordingly with the one in config.yaml if you modify it.
+  
+### Build Docker image yourself  
+It is possible to create a Docker container following these steps:  
+Clone the repository  
+
+    git clone https://github.com/jackyes/GoLivetracking.git  
+    
+Edit the config.yaml file  
+  
+    cd GoLiveTracking
+    nano config.yaml
+  
+Create the Docker container  
+  
+    docker build -t golivetracking .  
+  
+Run the container  
+  
+    docker run -p 8080:8080 golivetracking  
+  
+  
 ## Usage
 Once the application is running, navigate to the web interface by visiting http://localhost:8080 in your web browser.
 
@@ -37,6 +66,7 @@ time: the timestamp of the GPS coordinates.
 bearing: the bearing of the device.
 hdop: the horizontal dilution of precision of the GPS signal.
 ```
+  
 Example:
 ```
 http(s)://[address]:[port]/addpoint?lon=[LON]&lat=[LAT]&timestamp=[UNIXTIMESTAMP]&altitude=[ALT]&speed=[SPEED]&bearing=[BEARING]&user=[USERNR]&session=[SESSIONNR]&key=[KEY]  
