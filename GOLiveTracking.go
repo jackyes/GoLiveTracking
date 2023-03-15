@@ -133,6 +133,44 @@ func IndexHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 	// Push assets if client supports it
+	pushAssets(w)
+	// Get query parameters
+	user := r.URL.Query().Get("user")
+	session := r.URL.Query().Get("session")
+	maxshowpoint := r.URL.Query().Get("maxshowpoint")
+
+	if AppConfig.ShowMapOnlyWithUser && user == "" { //show only if user is provided
+		http.NotFound(w, r)
+		return
+	}
+
+	if !isValidParam(user, AppConfig.MaxGetParmLen) || !isValidParam(session, AppConfig.MaxGetParmLen) || (!AppConfig.AllowBypassMaxShowPoint && !isValidParam(maxshowpoint, AppConfig.MaxGetParmLen)) {
+		return
+	}
+
+	points := fetchPointsFromDB(db, user, session, maxshowpoint)
+	latlonhistoryfromDB := buildLatLonHistory(points)
+
+	p := &Page{
+		Latlonhistory:      latlonhistoryfromDB,
+		DefaultLat:         AppConfig.DefaultLat,
+		DefaultLon:         AppConfig.DefaultLon,
+		ShowOnlyLastPos:    AppConfig.ShowOnlyLastPos,
+		MapRefreshTime:     AppConfig.MapRefreshTime,
+		DefaultZoom:        AppConfig.DefaultZoom,
+		MinZoom:            AppConfig.MinZoom,
+		MaxZoom:            AppConfig.MaxZoom,
+		ShowPrecisonCircle: AppConfig.ShowPrecisonCircle,
+	}
+
+	renderTemplate(w, "index", p)
+}
+
+func isValidParam(param string, maxLen int) bool {
+	return checkParam(param, maxLen) && isSafeString(param)
+}
+
+func pushAssets(w http.ResponseWriter) {
 	if pusher, ok := w.(http.Pusher); ok {
 		assets := []string{
 			"/static/leaflet.css",
@@ -147,34 +185,16 @@ func IndexHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			}
 		}
 	}
-	// Get query parameters
-	user := r.URL.Query().Get("user")
-	session := r.URL.Query().Get("session")
-	maxshowpoint := r.URL.Query().Get("maxshowpoint")
+}
 
-	if AppConfig.ShowMapOnlyWithUser && user == "" { //show only if user is provided
-		http.NotFound(w, r)
-		return
-	}
-
-	if !checkParam(user, AppConfig.MaxGetParmLen) || !isSafeString(user) {
-		return
-	}
-	if !checkParam(session, AppConfig.MaxGetParmLen) || !isSafeString(session) {
-		return
-	}
-	if !isSafeString(maxshowpoint) || !checkParam(maxshowpoint, AppConfig.MaxGetParmLen) && !AppConfig.AllowBypassMaxShowPoint {
-		return
-	}
-
-	var latlonhistoryfromDB []string
-
+func fetchPointsFromDB(db *sql.DB, user, session, maxshowpoint string) []Point {
 	var limit string
 	if AppConfig.AllowBypassMaxShowPoint && maxshowpoint != "" {
 		limit = " LIMIT " + maxshowpoint
 	} else if AppConfig.MaxShowPoint != "0" {
 		limit = " LIMIT " + AppConfig.MaxShowPoint
 	}
+
 	var usrsession string
 	if user != "" {
 		usrsession = " WHERE user=" + user
@@ -182,22 +202,12 @@ func IndexHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			usrsession += " AND session=" + session
 		}
 	}
-	type Point struct {
-		Lat     string
-		Lon     string
-		Alt     string
-		Speed   string
-		Time    string
-		Bearing string
-		Hdop    string
-	}
 
 	query := `
                 SELECT lat, lon, alt, speed, time, bearing, hdop
-                FROM Points ` + usrsession + `
-                ORDER BY ID ASC
-                ` + limit
-
+				FROM Points ` + usrsession + `
+            	ORDER BY ID ASC
+            	` + limit
 	rows, err := db.Query(query)
 	if err != nil {
 		checkErr(err)
@@ -218,32 +228,33 @@ func IndexHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		checkErr(err)
 	}
 
+	return points
+
+}
+
+func buildLatLonHistory(points []Point) []string {
+	latlonhistoryfromDB := make([]string, 0, len(points))
+	var builder strings.Builder
 	for _, point := range points {
-		latlonhistoryfromDB = append(latlonhistoryfromDB, point.Lat+","+point.Lon)
+		builder.Reset()
+		builder.WriteString(point.Lat)
+		builder.WriteByte(',')
+		builder.WriteString(point.Lon)
+		latlonhistoryfromDB = append(latlonhistoryfromDB, builder.String())
 	}
 
-	p := &Page{
-		Latlonhistory:      latlonhistoryfromDB,
-		DefaultLat:         AppConfig.DefaultLat,
-		DefaultLon:         AppConfig.DefaultLon,
-		ShowOnlyLastPos:    AppConfig.ShowOnlyLastPos,
-		MapRefreshTime:     AppConfig.MapRefreshTime,
-		DefaultZoom:        AppConfig.DefaultZoom,
-		MinZoom:            AppConfig.MinZoom,
-		MaxZoom:            AppConfig.MaxZoom,
-		ShowPrecisonCircle: AppConfig.ShowPrecisonCircle,
-	}
-
-	renderTemplate(w, "index", p)
+	return latlonhistoryfromDB
 }
 
 func checkParam(param string, maxLen int) bool {
-	if param != "" && !isNumeric(param) {
-		fmt.Println(strings.Replace(param, "\n", "", -1) + " not numeric")
-		return false
-	} else if len(param) > maxLen {
-		fmt.Println(strings.Replace(param, "\n", "", -1) + " too big")
-		return false
+	if param != "" {
+		if !isNumeric(param) {
+			fmt.Printf("%s not numeric\n", sanitize(param))
+			return false
+		} else if len(param) > maxLen {
+			fmt.Printf("%s too big\n", sanitize(param))
+			return false
+		}
 	}
 	return true
 }
@@ -251,7 +262,7 @@ func checkParam(param string, maxLen int) bool {
 func getResetPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	key := r.URL.Query().Get("key")
 	if key != AppConfig.Key {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
@@ -283,16 +294,8 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	if AppConfig.ConsoleDebug {
-		fmt.Println("lat =>", strings.Replace(lat, "\n", "", -1))
-		fmt.Println("lon =>", strings.Replace(lon, "\n", "", -1))
-		fmt.Println("timestamp =>", strings.Replace(timestamp, "\n", "", -1))
-		fmt.Println("altitude =>", strings.Replace(altitude, "\n", "", -1))
-		fmt.Println("speed =>", strings.Replace(speed, "\n", "", -1))
-		fmt.Println("bearing =>", strings.Replace(bearing, "\n", "", -1))
-		fmt.Println("HDOP =>", strings.Replace(hdop, "\n", "", -1))
-		fmt.Println("user =>", strings.Replace(user, "\n", "", -1))
-		fmt.Println("session =>", strings.Replace(session, "\n", "", -1))
-		fmt.Println("key =>", strings.Replace(key, "\n", "", -1))
+		fmt.Printf("lat => %s\nlon => %s\ntimestamp => %s\naltitude => %s\nspeed => %s\nbearing => %s\nHDOP => %s\nuser => %s\nsession => %s\nkey => %s\n",
+			sanitize(lat), sanitize(lon), sanitize(timestamp), sanitize(altitude), sanitize(speed), sanitize(bearing), sanitize(hdop), sanitize(user), sanitize(session), sanitize(key))
 	}
 
 	//data verification will happen here...
@@ -381,6 +384,10 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	_, err = stmt.Exec(lat, lon, altitude, speed, timestamp, bearing, hdop, user, session)
 	checkErr(err)
 	tx.Commit()
+}
+
+func sanitize(input string) string {
+	return strings.Replace(input, "\n", "", -1)
 }
 
 func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
