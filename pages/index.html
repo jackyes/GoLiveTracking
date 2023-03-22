@@ -80,11 +80,12 @@ function getParameterByName(name, url) {
          fillOpacity: 0.3,
          radius: data.hdop
          }).addTo(markerGroup);
-         });
+         
          {{end}}
          L.marker([data.lat, data.lng]).addTo(markerGroup);
          latlngs.push([data.lat,data.lng]);
          polyline.setLatLngs(latlngs);
+      });
       </script>
    </body>
 </html>
