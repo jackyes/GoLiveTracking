@@ -187,27 +187,27 @@ func pushAssets(w http.ResponseWriter) {
 	}
 }
 
-func fetchPointsFromDB(db *sql.DB, user, session, maxshowpoint string) []Point {
+func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	var limit string
-	if AppConfig.AllowBypassMaxShowPoint && maxshowpoint != "" {
-		limit = " LIMIT " + maxshowpoint
+	if AppConfig.AllowBypassMaxShowPoint && maxShowPoint != "" {
+		limit = " LIMIT " + maxShowPoint
 	} else if AppConfig.MaxShowPoint != "0" {
 		limit = " LIMIT " + AppConfig.MaxShowPoint
 	}
 
-	var usrsession string
+	var whereClause string
 	if user != "" {
-		usrsession = " WHERE user=" + user
+		whereClause = fmt.Sprintf(" WHERE user=%s", user)
 		if session != "" {
-			usrsession += " AND session=" + session
+			whereClause += fmt.Sprintf(" AND session=%s", session)
 		}
 	}
-
-	query := `
-                SELECT lat, lon, alt, speed, time, bearing, hdop
-				FROM Points ` + usrsession + `
-            	ORDER BY ID ASC
-            	` + limit
+	
+	query := fmt.Sprintf(`
+		SELECT lat, lon, alt, speed, time, bearing, hdop
+		FROM Points %s
+		ORDER BY ID DESC
+		%s`, whereClause, limit)
 	rows, err := db.Query(query)
 	if err != nil {
 		checkErr(err)
