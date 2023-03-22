@@ -72,9 +72,6 @@ function getParameterByName(name, url) {
          source.addEventListener("location", function(event) {
          var data = JSON.parse(event.data);
          markerGroup.clearLayers();
-         L.marker([data.lat, data.lng]).addTo(markerGroup);
-         latlngs.push([data.lat,data.lng]);
-         polyline.setLatLngs(latlngs);
          L.marker([data.lat,data.lng]).addTo(markerGroup).bindPopup('Lat: ' + data.lat + '<br>Lon: ' + data.lng + '<br>Altitude: ' + data.alt + '<br>Speed: ' + data.speed + '<br>Time: ' + data.time + '<br>Bearing: ' + data.bearing + '<br>HDOP: ' + data.hdop).openPopup();
          {{if .ShowPrecisonCircle}}
          var circle = L.circle([data.lat, data.lng], {
@@ -85,6 +82,9 @@ function getParameterByName(name, url) {
          }).addTo(markerGroup);
          });
          {{end}}
+         L.marker([data.lat, data.lng]).addTo(markerGroup);
+         latlngs.push([data.lat,data.lng]);
+         polyline.setLatLngs(latlngs);
       </script>
    </body>
 </html>
