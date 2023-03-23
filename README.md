@@ -71,8 +71,13 @@ Example:
 ```
 http(s)://[address]:[port]/addpoint?lon=[LON]&lat=[LAT]&timestamp=[UNIXTIMESTAMP]&altitude=[ALT]&speed=[SPEED]&bearing=[BEARING]&user=[USERNR]&session=[SESSIONNR]&key=[KEY]  
 ```
+[OsmAnd](https://osmand.net/):
 ```
-OsmAnd: http(s)://[address]:[port]/addpoint?lat={0}&lon={1}&altitude={4}&acc={3}&timestamp={2}&speed={5}&bearing={6}&user=[USERNR]&session=[SESSIONNR]&key=[Key]
+http(s)://[address]:[port]/addpoint?lat={0}&lon={1}&altitude={4}&acc={3}&timestamp={2}&speed={5}&bearing={6}&user=[USERNR]&session=[SESSIONNR]&key=[Key]
+```
+[GPS Logger](https://f-droid.org/it/packages/com.mendhak.gpslogger/):
+```
+http(s)://[address]:[port]/addpoint?lat=%LAT&lon=%LON&timestamp=%TIMESTAMP&speed=%SPD&alt=% ALT&hdop=% HDOP&user=[USERNR]5&session=[SESSIONNR]&key=[Key]
 ```
 ## Resetting the map
 You can reset the map and remove all GPS coordinates by sending a GET request to the /resetpoint endpoint.
