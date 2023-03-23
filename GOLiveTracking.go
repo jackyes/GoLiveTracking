@@ -189,26 +189,47 @@ func pushAssets(w http.ResponseWriter) {
 
 func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	var limit string
+	var reverseOrder string = "ASC"
 	if AppConfig.AllowBypassMaxShowPoint && maxShowPoint != "" {
-		limit = " LIMIT " + maxShowPoint
+		limit = " LIMIT ?"
+		reverseOrder = "DESC"
 	} else if AppConfig.MaxShowPoint != "0" {
-		limit = " LIMIT " + AppConfig.MaxShowPoint
+		limit = " LIMIT ?"
+		reverseOrder = "DESC"
 	}
 
 	var whereClause string
+	var args []interface{}
 	if user != "" {
-		whereClause = fmt.Sprintf(" WHERE user=%s", user)
+		whereClause = " WHERE user=?"
+		args = append(args, user)
 		if session != "" {
-			whereClause += fmt.Sprintf(" AND session=%s", session)
+			whereClause += " AND session=?"
+			args = append(args, session)
 		}
 	}
-	
+
 	query := fmt.Sprintf(`
 		SELECT lat, lon, alt, speed, time, bearing, hdop
 		FROM Points %s
-		ORDER BY ID DESC
-		%s`, whereClause, limit)
-	rows, err := db.Query(query)
+		ORDER BY ID %s
+		%s`, whereClause, reverseOrder, limit)
+
+	stmt, err := db.Prepare(query)
+	if err != nil {
+		checkErr(err)
+	}
+	defer stmt.Close()
+
+	if limit != "" {
+		if maxShowPoint != "" {
+			args = append(args, maxShowPoint)
+		} else {
+			args = append(args, AppConfig.MaxShowPoint)
+		}
+	}
+
+	rows, err := stmt.Query(args...)
 	if err != nil {
 		checkErr(err)
 	}
@@ -223,13 +244,17 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 		}
 		points = append(points, point)
 	}
+	if reverseOrder == "DESC" {
+		for i, j := 0, len(points)-1; i < j; i, j = i+1, j-1 {
+			points[i], points[j] = points[j], points[i]
+		}
+	}
 
 	if err := rows.Err(); err != nil {
 		checkErr(err)
 	}
 
 	return points
-
 }
 
 func buildLatLonHistory(points []Point) []string {
