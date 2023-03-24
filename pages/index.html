@@ -22,7 +22,7 @@
 
       #btn-stop {
          background-color: red;
-         margin-right: 5px; 
+         margin-right: 5px;
       }
 
       #btn-resume {
@@ -38,8 +38,26 @@
       <button id="btn-stop" onclick="stopLT()">Stop Live Tracking</button>
       <button id="btn-resume" onclick="location.reload()">Resume Live Tracking</button>
    </div>
+   <div id="distance"></div>
    <div id="map"></div>
    <script type="text/javascript">
+      var totalDistance = 0;
+
+      function getDistance(lat1, lon1, lat2, lon2) {
+         const R = 6371e3; // metres
+         const φ1 = lat1 * Math.PI / 180; // φ, λ in radians
+         const φ2 = lat2 * Math.PI / 180;
+         const Δφ = (lat2 - lat1) * Math.PI / 180;
+         const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+         const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+         const d = R * c; // in metres
+         return d;
+      }
 
       function getParameterByName(name, url) {
          if (!url) url = window.location.href;
@@ -90,6 +108,15 @@
       var polyline = L.polyline(latlngs, { color: 'red' }).addTo(map);
       // zoom the map to the polyline
       map.fitBounds(polyline.getBounds());
+
+      for (var i = 1; i < latlngs.length; i++) {
+         const prevLatLng = latlngs[i - 1];
+         const currLatLng = latlngs[i];
+         const distance = getDistance(prevLatLng[0], prevLatLng[1], currLatLng[0], currLatLng[1]);
+         totalDistance += distance;
+      }
+
+      document.getElementById("distance").innerHTML = "Distance: " + (totalDistance / 1000).toFixed(2) + " km";
       {{ end }}
       {{.Lastpos }}
       var user = getParameterByName('user'); // get the value of the 'user' variable from the query string
@@ -111,6 +138,13 @@
          L.marker([data.lat, data.lng]).addTo(markerGroup);
          latlngs.push([data.lat, data.lng]);
          polyline.setLatLngs(latlngs);
+         if (latlngs.length > 1) {
+            const prevLatLng = latlngs[latlngs.length - 2];
+            const currLatLng = latlngs[latlngs.length - 1];
+            const distance = getDistance(prevLatLng[0], prevLatLng[1], currLatLng[0], currLatLng[1]);
+            totalDistance += distance;
+            document.getElementById("distance").innerHTML = "Total displayed Distance: " + (totalDistance / 1000).toFixed(2) + " km";
+         }
       });
    </script>
 </body>
