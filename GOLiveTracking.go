@@ -107,7 +107,11 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/addpoint", func(w http.ResponseWriter, r *http.Request) { getAddPoint(w, r, db) })
 	mux.HandleFunc("/resetpoint", func(w http.ResponseWriter, r *http.Request) { getResetPoint(w, r, db) })
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("static")))
+	mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "max-age=604800")
+		staticHandler.ServeHTTP(w, r)
+	}))
 	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) { eventsHandler(w, r, db) })
 	mux.HandleFunc("/favicon.ico", faviconHandler)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { IndexHandler(w, r, db) })
