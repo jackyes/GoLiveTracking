@@ -2,8 +2,10 @@
 
 <head>
    <title>Live Tracking</title>
-   <link rel="stylesheet" href="./static/leaflet.css" type="text/css">
-   <script src="./static/leaflet.js" type="text/javascript"></script>
+   <link rel="stylesheet" href="https://cdn.statically.io/gh/jackyes/GoLiveTracking/main/static/leaflet.css"
+      type="text/css">
+   <script src="https://cdn.statically.io/gh/jackyes/GoLiveTracking/main/static/leaflet.min.js"
+      type="text/javascript"></script>
    <style type="text/css">
       #map {
          height: 100%
@@ -36,7 +38,7 @@
 <body>
    <div class="button-container">
       <button id="btn-stop" onclick="stopLT()">Stop Live Tracking</button>
-      <button id="btn-resume" onclick="location.reload()">Resume Live Tracking</button>
+      <button id="btn-resume" onclick="location.reload()">Resume Live Tracking - Refresh in:<span id="countdown"></span></button>
    </div>
    <div id="distance"></div>
    <div id="map"></div>
@@ -146,6 +148,29 @@
             document.getElementById("distance").innerHTML = "Total displayed Distance: " + (totalDistance / 1000).toFixed(2) + " km";
          }
       });
+      // Durata del countdown in secondi
+      var countdownDuration = {{.MapRefreshTime}};
+
+      // Funzione per aggiornare il contenuto HTML dell'elemento span con il tempo rimanente
+      function updateCountdown() {
+         var countdownElement = document.getElementById('countdown');
+         var timeLeft = Math.max(countdownDuration - Math.floor((new Date() - startTime) / 1000), 0);
+         countdownElement.innerHTML = ' (' + timeLeft + 's)';
+      }
+
+      // Avvio del countdown
+      var startTime = new Date();
+      var countdownInterval = setInterval(updateCountdown, 1000);
+
+      // Aggiornamento del contenuto HTML dell'elemento span con il tempo rimanente
+      updateCountdown();
+
+      // Ricaricamento della pagina dopo il countdown
+      setTimeout(function () {
+         clearInterval(countdownInterval);
+         location.reload();
+      }, countdownDuration * 1000);
+
    </script>
 </body>
 
