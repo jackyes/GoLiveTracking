@@ -77,7 +77,7 @@ http(s)://[address]:[port]/addpoint?lat={0}&lon={1}&altitude={4}&acc={3}&timesta
 ```
 [GPS Logger](https://f-droid.org/it/packages/com.mendhak.gpslogger/):
 ```
-http(s)://[address]:[port]/addpoint?lat=%LAT&lon=%LON&timestamp=%TIMESTAMP&speed=%SPD&alt=% ALT&hdop=% HDOP&user=[USERNR]5&session=[SESSIONNR]&key=[Key]
+http(s)://[address]:[port]/addpoint?lat=%LAT&lon=%LON&timestamp=%TIMESTAMP&speed=%SPD&altitude=%ALT&hdop=%HDOP&user=[USERNR]5&session=[SESSIONNR]&key=[Key]
 ```
 ## Resetting the map
 You can reset the map and remove all GPS coordinates by sending a GET request to the /resetpoint endpoint.
