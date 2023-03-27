@@ -148,24 +148,19 @@
             document.getElementById("distance").innerHTML = "Total displayed Distance: " + (totalDistance / 1000).toFixed(2) + " km";
          }
       });
-      // Durata del countdown in secondi
       var countdownDuration = {{.MapRefreshTime}};
 
-      // Funzione per aggiornare il contenuto HTML dell'elemento span con il tempo rimanente
       function updateCountdown() {
          var countdownElement = document.getElementById('countdown');
          var timeLeft = Math.max(countdownDuration - Math.floor((new Date() - startTime) / 1000), 0);
          countdownElement.innerHTML = ' (' + timeLeft + 's)';
       }
 
-      // Avvio del countdown
       var startTime = new Date();
       var countdownInterval = setInterval(updateCountdown, 1000);
 
-      // Aggiornamento del contenuto HTML dell'elemento span con il tempo rimanente
       updateCountdown();
 
-      // Ricaricamento della pagina dopo il countdown
       setTimeout(function () {
          clearInterval(countdownInterval);
          location.reload();
