@@ -11,6 +11,7 @@ import (
 	"strings"
 	"text/template"
 	"time"
+	"github.com/NYTimes/gziphandler"
 
 	_ "github.com/mattn/go-sqlite3"
 	"gopkg.in/yaml.v3"
@@ -114,7 +115,7 @@ func main() {
 	}))
 	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) { eventsHandler(w, r, db) })
 	mux.HandleFunc("/favicon.ico", faviconHandler)
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { IndexHandler(w, r, db) })
+	mux.Handle("/", gziphandler.GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { IndexHandler(w, r, db) })))
 
 	if !AppConfig.DisableNoTLS {
 		http.ListenAndServe(":"+AppConfig.ServerPort, mux)
