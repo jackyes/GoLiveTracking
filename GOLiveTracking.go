@@ -339,6 +339,10 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		fmt.Println("LAT/LON too big")
 		return
 	}
+	if !isValidCoordinates(lat, lon) {
+        fmt.Println("Invalid coordinates")
+        return
+    }
 	if timestamp == "" {
 		timestamp = "0"
 	} else if !isNumeric(timestamp) {
@@ -454,12 +458,24 @@ func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		case <-notify:
 			return
 		default:
-			where := ""
+			var query string
 			if (user != "0") && (session != "0") {
-				where = "WHERE USER = " + user + " AND SESSION = " + session
+				query = "SELECT * FROM Points WHERE USER = ? AND SESSION = ? ORDER BY ID DESC LIMIT 1"
+			} else {
+				query = "SELECT * FROM Points ORDER BY ID DESC LIMIT 1"
 			}
-			query := "SELECT * FROM Points " + where + " ORDER BY ID DESC LIMIT 1"
-			rows, err := db.Query(query)
+			
+			stmt, err := db.Prepare(query)
+			checkErr(err)
+			defer stmt.Close()
+			
+			var rows *sql.Rows
+			if (user != "0") && (session != "0") {
+				rows, err = stmt.Query(user, session)
+			} else {
+				rows, err = stmt.Query()
+			}
+			checkErr(err)
 			defer rows.Close()
 
 			var point Point
@@ -565,4 +581,16 @@ func checkErr(err error, args ...string) {
 		fmt.Println("Error")
 		fmt.Println(err, " : ", args)
 	}
+}
+
+func isValidCoordinates(lat, lon string) bool {
+	latFloat, err := strconv.ParseFloat(lat, 64)
+	if err != nil {
+		return false
+	}
+	lonFloat, err := strconv.ParseFloat(lon, 64)
+	if err != nil {
+		return false
+	}
+	return latFloat >= -90 && latFloat <= 90 && lonFloat >= -180 && lonFloat <= 180
 }
