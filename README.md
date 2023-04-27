@@ -83,7 +83,12 @@ http(s)://[address]:[port]/addpoint?lat=%LAT&lon=%LON&timestamp=%TIMESTAMP&speed
 You can reset the map and remove all GPS coordinates by sending a GET request to the /resetpoint endpoint.
 ```
 http(s)://[address]:[port]/resetpoint?key=[KEY]
+```  
+
+## Get a GPX file
 ```
+http(s)://[address]:[port]/download-gpx?user=[UsrNr]&session=[SessionNr]&key=[KEY]
+```  
 
 ## Server-Sent Events (SSE)
 The application uses HTML5 Server-Sent Events (SSE) to push location updates to the client in real-time. The /events endpoint returns a stream of JSON-encoded location updates.
