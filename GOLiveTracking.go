@@ -3,7 +3,9 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"github.com/NYTimes/gziphandler"
 	"net/http"
 	"os"
 	"regexp"
@@ -11,7 +13,6 @@ import (
 	"strings"
 	"text/template"
 	"time"
-	"github.com/NYTimes/gziphandler"
 
 	_ "github.com/mattn/go-sqlite3"
 	"gopkg.in/yaml.v3"
@@ -91,6 +92,29 @@ type Page struct {
 	ShowPrecisonCircle bool
 }
 
+type GPX struct {
+	XMLName xml.Name `xml:"gpx"`
+	Version string   `xml:"version,attr"`
+	Creator string   `xml:"creator,attr"`
+	Tracks  []Track  `xml:"trk"`
+}
+
+type Track struct {
+	Name     string    `xml:"name"`
+	Segments []Segment `xml:"trkseg"`
+}
+
+type Segment struct {
+	Points []GPXPoint `xml:"trkpt"`
+}
+
+type GPXPoint struct {
+	Latitude  float64 `xml:"lat,attr"`
+	Longitude float64 `xml:"lon,attr"`
+	Elevation float64 `xml:"ele"`
+	Time      string  `xml:"time"`
+}
+
 func main() {
 	ReadConfig()
 	if _, err := os.Stat("./sqlite-database.db"); os.IsNotExist(err) {
@@ -108,6 +132,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/addpoint", func(w http.ResponseWriter, r *http.Request) { getAddPoint(w, r, db) })
 	mux.HandleFunc("/resetpoint", func(w http.ResponseWriter, r *http.Request) { getResetPoint(w, r, db) })
+	mux.HandleFunc("/download-gpx", func(w http.ResponseWriter, r *http.Request) { getGpxTrack(w, r, db) })
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("static")))
 	mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=604800")
@@ -215,10 +240,10 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	}
 
 	query := fmt.Sprintf(`
-		SELECT lat, lon, alt, speed, time, bearing, hdop
-		FROM Points %s
-		ORDER BY ID %s
-		%s`, whereClause, reverseOrder, limit)
+                SELECT lat, lon, alt, speed, time, bearing, hdop
+                FROM Points %s
+                ORDER BY ID %s
+                %s`, whereClause, reverseOrder, limit)
 
 	stmt, err := db.Prepare(query)
 	if err != nil {
@@ -340,9 +365,9 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 	if !isValidCoordinates(lat, lon) {
-        fmt.Println("Invalid coordinates")
-        return
-    }
+		fmt.Println("Invalid coordinates")
+		return
+	}
 	if timestamp == "" {
 		timestamp = "0"
 	} else if !isNumeric(timestamp) {
@@ -464,11 +489,11 @@ func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			} else {
 				query = "SELECT * FROM Points ORDER BY ID DESC LIMIT 1"
 			}
-			
+
 			stmt, err := db.Prepare(query)
 			checkErr(err)
 			defer stmt.Close()
-			
+
 			var rows *sql.Rows
 			if (user != "0") && (session != "0") {
 				rows, err = stmt.Query(user, session)
@@ -516,6 +541,87 @@ func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			}
 			time.Sleep(d)
 		}
+	}
+}
+
+func getGpxTrack(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	// Extraction of user and session parameters from the query string
+	key := r.URL.Query().Get("key")
+	if key != AppConfig.Key {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	user := r.URL.Query().Get("user")
+	if user == "" || !isNumeric(user) || len(user) > AppConfig.MaxGetParmLen {
+		http.Error(w, "Invalid user parameter", http.StatusBadRequest)
+		return
+	}
+	session := r.URL.Query().Get("session")
+	if session == "" {
+		session = "0"
+	} else if !isNumeric(session) || len(session) > AppConfig.MaxGetParmLen {
+		http.Error(w, "Invalid session parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Query to select the GPS track of the specified user and session
+	query := `
+                SELECT LAT, LON, ALT, TIME
+                FROM Points
+                WHERE user = ? AND session = ?
+                ORDER BY TIME ASC
+        `
+	rows, err := db.Query(query, user, session)
+	if err != nil {
+		http.Error(w, "Query error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	// Creation of the GPX structure
+	gpx := GPX{
+		Version: "1.1",
+		Creator: "GoLiveTracking",
+		Tracks: []Track{{
+			Name: "GPS Track",
+		}},
+	}
+
+	// Populating the GPX structure with the GPS track data
+	var lat, lon, ele float64
+	var t string
+	var segment Segment
+	for rows.Next() {
+		err = rows.Scan(&lat, &lon, &ele, &t)
+		if err != nil {
+			http.Error(w, "Errore reading from db", http.StatusInternalServerError)
+			return
+		}
+
+		point := GPXPoint{
+			Latitude:  lat,
+			Longitude: lon,
+			Elevation: ele,
+			Time:      t,
+		}
+
+		segment.Points = append(segment.Points, point)
+
+	}
+	// Adding the last segment to the current track
+	gpx.Tracks[0].Segments = append(gpx.Tracks[0].Segments, segment)
+
+	// Setting the HTTP headers for downloading the GPX file
+	w.Header().Set("Content-Disposition", "attachment; filename=my_gps_track.gpx")
+	w.Header().Set("Content-Type", "application/gpx+xml")
+
+	// Writing the HTTP response as a GPX file
+	enc := xml.NewEncoder(w)
+	enc.Indent("", "    ")
+	err = enc.Encode(gpx)
+	if err != nil {
+		http.Error(w, "Errore writing GPX file", http.StatusInternalServerError)
+		return
 	}
 }
 
