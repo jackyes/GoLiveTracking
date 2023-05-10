@@ -49,8 +49,8 @@ Run the container
   
   
 ## Usage
-Once the application is running, navigate to the web interface by visiting http://localhost:8080 in your web browser.
-
+Once the application is running, navigate to the web interface by visiting http://localhost:8080 in your web browser.  
+!!!An Android dedicated app is coming soon!!!  
 Use an app like OsmAnd (or a simple HTTP Get) to send data to the server:  
   
 ## Adding GPS coordinates:  
