@@ -499,6 +499,8 @@ func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
                         var rows *sql.Rows
                         if (user != "0") && (session != "0") {
                                 rows, err = stmt.Query(user, session)
+                        } else if (user != "0") {
+                                rows, err = stmt.Query(user)
                         } else {
                                 rows, err = stmt.Query()
                         }
