@@ -84,6 +84,12 @@ You can reset the map and remove all GPS coordinates by sending a GET request to
 ```
 http(s)://[address]:[port]/resetpoint?key=[KEY]
 ```  
+  
+## Resetting specific session
+You can reset a specific session by sending a GET request to the /resetpoint endpoint.
+```
+http(s)://[address]:[port]/reset?user=[USERNR]&session[SESSIONNR]key=[KEY]
+```  
 
 ## Get a GPX file
 ```
