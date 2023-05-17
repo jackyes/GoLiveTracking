@@ -130,8 +130,10 @@ func main() {
         }
 
         mux := http.NewServeMux()
+        
         mux.HandleFunc("/addpoint", func(w http.ResponseWriter, r *http.Request) { getAddPoint(w, r, db) })
         mux.HandleFunc("/resetpoint", func(w http.ResponseWriter, r *http.Request) { getResetPoint(w, r, db) })
+        mux.HandleFunc("/reset", func(w http.ResponseWriter, r *http.Request) { getResetPointUsrSession(w, r, db) })
         mux.HandleFunc("/download-gpx", func(w http.ResponseWriter, r *http.Request) { getGpxTrack(w, r, db) })
         staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("static")))
         mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -329,6 +331,30 @@ func getResetPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
         w.WriteHeader(http.StatusOK)
         w.Write([]byte("OK"))
 }
+
+func getResetPointUsrSession(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+        user := r.URL.Query().Get("user")
+        session := r.URL.Query().Get("session")
+        key := r.URL.Query().Get("key")
+
+        if key != AppConfig.Key {
+                http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+                return
+        }
+
+        stmt, err := db.Prepare("delete from Points where USER=? and SESSION=?")
+        if err != nil {
+                checkErr(err)
+        }
+        _, err = stmt.Exec(user, session)
+        if err != nil {
+                checkErr(err)
+        }
+
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte("OK"))
+}
+
 
 func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
