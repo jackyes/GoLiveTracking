@@ -624,7 +624,7 @@ func getGpxTrack(w http.ResponseWriter, r *http.Request, db *sql.DB) {
         for rows.Next() {
                 err = rows.Scan(&lat, &lon, &ele, &t)
                 if err != nil {
-                        http.Error(w, "Errore reading from db", http.StatusInternalServerError)
+                        http.Error(w, "Error reading from db", http.StatusInternalServerError)
                         return
                 }
 
@@ -650,7 +650,7 @@ func getGpxTrack(w http.ResponseWriter, r *http.Request, db *sql.DB) {
         enc.Indent("", "    ")
         err = enc.Encode(gpx)
         if err != nil {
-                http.Error(w, "Errore writing GPX file", http.StatusInternalServerError)
+                http.Error(w, "Error writing GPX file", http.StatusInternalServerError)
                 return
         }
 }
