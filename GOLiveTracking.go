@@ -136,6 +136,7 @@ func main() {
 	mux.HandleFunc("/resetpoint", func(w http.ResponseWriter, r *http.Request) { getResetPoint(w, r, db) })
 	mux.HandleFunc("/reset", func(w http.ResponseWriter, r *http.Request) { getResetPointUsrSession(w, r, db) })
 	mux.HandleFunc("/download-gpx", func(w http.ResponseWriter, r *http.Request) { getGpxTrack(w, r, db) })
+	mux.HandleFunc("/getusersession", func(w http.ResponseWriter, r *http.Request) { getUserSessions(w, r, db) })
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("static")))
 	mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=604800")
@@ -355,6 +356,55 @@ func getResetPointUsrSession(w http.ResponseWriter, r *http.Request, db *sql.DB)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }
+
+func getUserSessions(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	key := r.URL.Query().Get("key")
+	if key != AppConfig.Key {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	user := r.URL.Query().Get("user")
+	if !checkParam(user, AppConfig.MaxGetParmLen) {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	stmt, err := db.Prepare("SELECT DISTINCT SESSION FROM Points WHERE USER = ?")
+	if err != nil {
+		checkErr(err)
+		return
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.Query(user)
+	if err != nil {
+		checkErr(err)
+		return
+	}
+	defer rows.Close()
+
+	var sessions []string
+	for rows.Next() {
+		var session string
+		if err := rows.Scan(&session); err != nil {
+			checkErr(err)
+			return
+		}
+		sessions = append(sessions, session)
+	}
+
+	if err := rows.Err(); err != nil {
+		checkErr(err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	for _, session := range sessions {
+		fmt.Fprintf(w, `<a href="/?user=%s&session=%s">Session %s</a><br><br>`, user, session, session)
+	}
+}
+
 
 func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
