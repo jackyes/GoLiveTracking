@@ -645,7 +645,6 @@ func getGpxTrack(w http.ResponseWriter, r *http.Request, db *sql.DB) {
                 SELECT LAT, LON, ALT, TIME
                 FROM Points
                 WHERE user = ? AND session = ?
-                ORDER BY TIME ASC
         `
 	rows, err := db.Query(query, user, session)
 	if err != nil {
