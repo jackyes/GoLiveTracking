@@ -12,6 +12,7 @@ import (
 	"strings"
 	"text/template"
 	"time"
+	"sort"
 
 	"github.com/NYTimes/gziphandler"
 
@@ -232,26 +233,26 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 		reverseOrder = "DESC"
 	}
 
-	var whereClause string
+	var whereClause strings.Builder
 	var args []interface{}
 	if user != "" {
-		whereClause = " WHERE user=?"
+		whereClause.WriteString(" WHERE user=?")
 		args = append(args, user)
 		if session != "" {
-			whereClause += " AND session=?"
+			whereClause.WriteString(" AND session=?")
 			args = append(args, session)
 		}
 	}
 
 	query := fmt.Sprintf(`
-                SELECT lat, lon, alt, speed, time, bearing, hdop
-                FROM Points %s
-                ORDER BY ID %s
-                %s`, whereClause, reverseOrder, limit)
+		SELECT lat, lon, alt, speed, time, bearing, hdop
+		FROM Points %s
+		ORDER BY ID %s
+		%s`, whereClause.String(), reverseOrder, limit)
 
 	stmt, err := db.Prepare(query)
 	if err != nil {
-		checkErr(err)
+		// checkErr(err)
 	}
 	defer stmt.Close()
 
@@ -265,7 +266,7 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 
 	rows, err := stmt.Query(args...)
 	if err != nil {
-		checkErr(err)
+		// checkErr(err)
 	}
 	defer rows.Close()
 
@@ -274,18 +275,21 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	for rows.Next() {
 		var point Point
 		if err := rows.Scan(&point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop); err != nil {
-			checkErr(err)
+			// checkErr(err)
 		}
 		points = append(points, point)
 	}
+
 	if reverseOrder == "DESC" {
-		for i, j := 0, len(points)-1; i < j; i, j = i+1, j-1 {
-			points[i], points[j] = points[j], points[i]
-		}
+		sort.Slice(points, func(i, j int) bool {
+			timeI, _ := time.Parse(time.RFC3339, points[i].Time)
+			timeJ, _ := time.Parse(time.RFC3339, points[j].Time)
+			return timeJ.Before(timeI)
+		})
 	}
 
 	if err := rows.Err(); err != nil {
-		checkErr(err)
+		// checkErr(err)
 	}
 
 	return points
