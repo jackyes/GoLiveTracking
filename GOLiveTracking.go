@@ -292,16 +292,10 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 }
 
 func buildLatLonHistory(points []Point) []string {
-	latlonhistoryfromDB := make([]string, 0, len(points))
-	var builder strings.Builder
-	for _, point := range points {
-		builder.Reset()
-		builder.WriteString(point.Lat)
-		builder.WriteByte(',')
-		builder.WriteString(point.Lon)
-		latlonhistoryfromDB = append(latlonhistoryfromDB, builder.String())
+	latlonhistoryfromDB := make([]string, len(points))
+	for i, point := range points {
+		latlonhistoryfromDB[i] = point.Lat + "," + point.Lon
 	}
-
 	return latlonhistoryfromDB
 }
 
