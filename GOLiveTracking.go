@@ -13,6 +13,7 @@ import (
 	"text/template"
 	"time"
 	"sort"
+	"bytes"
 
 	"github.com/NYTimes/gziphandler"
 
@@ -296,11 +297,21 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 }
 
 func buildLatLonHistory(points []Point) []string {
-	latlonhistoryfromDB := make([]string, len(points))
-	for i, point := range points {
-		latlonhistoryfromDB[i] = point.Lat + "," + point.Lon
-	}
-	return latlonhistoryfromDB
+  // Create a buffer to store the lat/lon history
+  var latLonHistory bytes.Buffer
+
+  // Iterate over the points and add their lat/lon coordinates to the buffer
+  for _, point := range points {
+    latLonHistory.WriteString(point.Lat + "," + point.Lon)
+
+    // Add a comma separator if this is not the last point
+    if point != points[len(points)-1] {
+      latLonHistory.WriteString("!end!")
+    }
+  }
+
+  // Return the lat/lon history as a slice of strings
+  return strings.Split(latLonHistory.String(), "!end!")
 }
 
 func checkParam(param string, maxLen int) bool {
