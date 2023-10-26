@@ -14,6 +14,7 @@ import (
 	"time"
 	"sort"
 	"bytes"
+        "html"
 
 	"github.com/NYTimes/gziphandler"
 
@@ -408,10 +409,13 @@ func getUserSessions(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html")
-	for _, session := range sessions {
-		fmt.Fprintf(w, `<a href="/?user=%s&session=%s">Session %s</a><br><br>`, user, session, session)
-	}
+        w.Header().Set("Content-Type", "text/html")
+        for _, session := range sessions {
+            escapedUser := html.EscapeString(user)
+            escapedSession := html.EscapeString(session)
+            fmt.Fprintf(w, `<a href="/?user=%s&session=%s">Session %s</a><br><br>`, escapedUser, escapedSession, escapedSession)
+        }
+        
 }
 
 
