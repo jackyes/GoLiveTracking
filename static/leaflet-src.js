@@ -1,5 +1,5 @@
 /* @preserve
- * Leaflet 1.9.2+main.9b9c712, a JS library for interactive maps. https://leafletjs.com
+ * Leaflet 1.9.2+main.d85f326, a JS library for interactive maps. https://leafletjs.com
  * (c) 2010-2023 Volodymyr Agafonkin, (c) 2010-2011 CloudMade
  */
 
@@ -9,7 +9,7 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.leaflet = {}));
 })(this, (function (exports) { 'use strict';
 
-  var version = "1.9.2+main.9b9c7120";
+  var version = "1.9.2+main.d85f3260";
 
   /*
    * @namespace Util
@@ -18,13 +18,16 @@
    */
 
   // @function extend(dest: Object, src?: Object): Object
-  // Merges the properties of the `src` object (or multiple objects) into `dest` object and returns the latter. Has an `L.extend` shortcut.
+  // Merges the properties (including properties inherited through the prototype chain)
+  // of the `src` object (or multiple objects) into `dest` object and returns the latter.
+  // Has an `L.extend` shortcut.
   function extend(dest, ...args) {
-  	let i, j, len, src;
+  	let j, len, src;
 
   	for (j = 0, len = args.length; j < len; j++) {
   		src = args[j];
-  		for (i in src) {
+  		// eslint-disable-next-line guard-for-in
+  		for (const i in src) {
   			dest[i] = src[i];
   		}
   	}
@@ -117,7 +120,9 @@
   		obj.options = obj.options ? Object.create(obj.options) : {};
   	}
   	for (const i in options) {
-  		obj.options[i] = options[i];
+  		if (Object.hasOwn(options, i)) {
+  			obj.options[i] = options[i];
+  		}
   	}
   	return obj.options;
   }
@@ -130,7 +135,9 @@
   function getParamString(obj, existingUrl, uppercase) {
   	const params = [];
   	for (const i in obj) {
-  		params.push(`${encodeURIComponent(uppercase ? i.toUpperCase() : i)}=${encodeURIComponent(obj[i])}`);
+  		if (Object.hasOwn(obj, i)) {
+  			params.push(`${encodeURIComponent(uppercase ? i.toUpperCase() : i)}=${encodeURIComponent(obj[i])}`);
+  		}
   	}
   	return ((!existingUrl || !existingUrl.includes('?')) ? '?' : '&') + params.join('&');
   }
@@ -380,9 +387,11 @@
   		// types can be a map of types/handlers
   		if (typeof types === 'object') {
   			for (const type in types) {
-  				// we don't process space-separated events here for performance;
-  				// it's a hot path since Layer uses the on(obj) syntax
-  				this._on(type, types[type], fn);
+  				if (Object.hasOwn(types, type)) {
+  					// we don't process space-separated events here for performance;
+  					// it's a hot path since Layer uses the on(obj) syntax
+  					this._on(type, types[type], fn);
+  				}
   			}
 
   		} else {
@@ -416,7 +425,9 @@
 
   		} else if (typeof types === 'object') {
   			for (const type in types) {
-  				this._off(type, types[type], fn);
+  				if (Object.hasOwn(types, type)) {
+  					this._off(type, types[type], fn);
+  				}
   			}
 
   		} else {
@@ -613,9 +624,11 @@
   		// types can be a map of types/handlers
   		if (typeof types === 'object') {
   			for (const type in types) {
-  				// we don't process space-separated events here for performance;
-  				// it's a hot path since Layer uses the on(obj) syntax
-  				this._on(type, types[type], fn, true);
+  				if (Object.hasOwn(types, type)) {
+  					// we don't process space-separated events here for performance;
+  					// it's a hot path since Layer uses the on(obj) syntax
+  					this._on(type, types[type], fn, true);
+  				}
   			}
 
   		} else {
@@ -649,10 +662,12 @@
 
   	_propagateEvent(e) {
   		for (const id in this._eventParents) {
-  			this._eventParents[id].fire(e.type, extend({
-  				layer: e.target,
-  				propagatedFrom: e.target
-  			}, e), true);
+  			if (Object.hasOwn(this._eventParents, id)) {
+  				this._eventParents[id].fire(e.type, extend({
+  					layer: e.target,
+  					propagatedFrom: e.target
+  				}, e), true);
+  			}
   		}
   	}
   };
@@ -1948,7 +1963,9 @@
 
   	e.touches = [];
   	for (const i in _pointers) {
-  		e.touches.push(_pointers[i]);
+  		if (Object.hasOwn(_pointers, i)) {
+  			e.touches.push(_pointers[i]);
+  		}
   	}
   	e.changedTouches = [e];
 
@@ -2211,8 +2228,8 @@
   	if (!element.style) { return; }
   	restoreOutline();
   	_outlineElement = element;
-  	_outlineStyle = element.style.outline;
-  	element.style.outline = 'none';
+  	_outlineStyle = element.style.outlineStyle;
+  	element.style.outlineStyle = 'none';
   	on(window, 'keydown', restoreOutline);
   }
 
@@ -2220,7 +2237,7 @@
   // Cancels the effects of a previous [`L.DomUtil.preventOutline`](#domutil-preventoutline).
   function restoreOutline() {
   	if (!_outlineElement) { return; }
-  	_outlineElement.style.outline = _outlineStyle;
+  	_outlineElement.style.outlineStyle = _outlineStyle;
   	_outlineElement = undefined;
   	_outlineStyle = undefined;
   	off(window, 'keydown', restoreOutline);
@@ -2287,8 +2304,8 @@
   function on(obj, types, fn, context) {
 
   	if (types && typeof types === 'object') {
-  		for (const type in types) {
-  			addOne(obj, type, types[type], fn);
+  		for (const [type, listener] of Object.entries(types)) {
+  			addOne(obj, type, listener, fn);
   		}
   	} else {
   		types = splitWords(types);
@@ -2326,8 +2343,8 @@
   		delete obj[eventsKey];
 
   	} else if (types && typeof types === 'object') {
-  		for (const type in types) {
-  			removeOne(obj, type, types[type], fn);
+  		for (const [type, listener] of Object.entries(types)) {
+  			removeOne(obj, type, listener, fn);
   		}
 
   	} else {
@@ -2347,9 +2364,11 @@
 
   function batchRemove(obj, filterFn) {
   	for (const id in obj[eventsKey]) {
-  		const type = id.split(/\d/)[0];
-  		if (!filterFn || filterFn(type)) {
-  			removeOne(obj, type, null, null, id);
+  		if (Object.hasOwn(obj[eventsKey], id)) {
+  			const type = id.split(/\d/)[0];
+  			if (!filterFn || filterFn(type)) {
+  				removeOne(obj, type, null, null, id);
+  			}
   		}
   	}
   }
@@ -2590,7 +2609,7 @@
    * @class PosAnimation
    * @aka L.PosAnimation
    * @inherits Evented
-   * Used internally for panning animations, utilizing CSS3 Transitions for modern browsers and a timer fallback for IE6-9.
+   * Used internally for panning animations, utilizing CSS Transitions for modern browsers and a timer fallback for IE6-9.
    *
    * @example
    * ```js
@@ -2763,7 +2782,7 @@
   		// @section Animation Options
   		// @option zoomAnimation: Boolean = true
   		// Whether the map zoom animation is enabled. By default it's enabled
-  		// in all browsers that support CSS3 Transitions except Android.
+  		// in all browsers that support CSS Transitions except Android.
   		zoomAnimation: true,
 
   		// @option zoomAnimationThreshold: Number = 4
@@ -2772,13 +2791,13 @@
 
   		// @option fadeAnimation: Boolean = true
   		// Whether the tile fade animation is enabled. By default it's enabled
-  		// in all browsers that support CSS3 Transitions except Android.
+  		// in all browsers that support CSS Transitions except Android.
   		fadeAnimation: true,
 
   		// @option markerZoomAnimation: Boolean = true
   		// Whether markers animate their zoom with the zoom animation, if disabled
   		// they will disappear for the length of the animation. By default it's
-  		// enabled in all browsers that support CSS3 Transitions except Android.
+  		// enabled in all browsers that support CSS Transitions except Android.
   		markerZoomAnimation: true,
 
   		// @option transform3DLimit: Number = 2^23
@@ -3051,7 +3070,7 @@
   		    startZoom = this._zoom;
 
   		targetCenter = toLatLng(targetCenter);
-  		targetZoom = targetZoom === undefined ? startZoom : targetZoom;
+  		targetZoom = targetZoom === undefined ? startZoom : this._limitZoom(targetZoom);
 
   		const w0 = Math.max(size.x, size.y),
   		    w1 = w0 * this.getZoomScale(startZoom, targetZoom),
@@ -3466,14 +3485,18 @@
 
   		let i;
   		for (i in this._layers) {
-  			this._layers[i].remove();
+  			if (Object.hasOwn(this._layers, i)) {
+  				this._layers[i].remove();
+  			}
   		}
   		for (i in this._panes) {
-  			this._panes[i].remove();
+  			if (Object.hasOwn(this._panes, i)) {
+  				this._panes[i].remove();
+  			}
   		}
 
   		this._layers = [];
-  		this._panes = [];
+  		this._panes = {};
   		delete this._mapPane;
   		delete this._renderer;
 
@@ -4070,7 +4093,7 @@
 
   	_isClickDisabled(el) {
   		while (el && el !== this._container) {
-  			if (el['_leaflet_disable_click']) { return true; }
+  			if (el['_leaflet_disable_click'] || !el.parentNode) { return true; }
   			el = el.parentNode;
   		}
   	},
@@ -4364,7 +4387,7 @@
 
   		requestAnimFrame(function () {
   			this
-  			    ._moveStart(true, false)
+  			    ._moveStart(true, options.noMoveStart ?? false)
   			    ._animateZoom(center, zoom, true);
   		}, this);
 
@@ -4600,7 +4623,9 @@
 
   	_clearControlPos() {
   		for (const i in this._controlCorners) {
-  			this._controlCorners[i].remove();
+  			if (Object.hasOwn(this._controlCorners, i)) {
+  				this._controlCorners[i].remove();
+  			}
   		}
   		this._controlContainer.remove();
   		delete this._controlCorners;
@@ -4687,13 +4712,18 @@
   		this._layers = [];
   		this._lastZIndex = 0;
   		this._handlingClick = false;
+  		this._preventClick = false;
 
   		for (const i in baseLayers) {
-  			this._addLayer(baseLayers[i], i);
+  			if (Object.hasOwn(baseLayers, i)) {
+  				this._addLayer(baseLayers[i], i);
+  			}
   		}
 
   		for (const i in overlays) {
-  			this._addLayer(overlays[i], i, true);
+  			if (Object.hasOwn(overlays, i)) {
+  				this._addLayer(overlays[i], i, true);
+  			}
   		}
   	},
 
@@ -4706,6 +4736,11 @@
 
   		for (let i = 0; i < this._layers.length; i++) {
   			this._layers[i].layer.on('add remove', this._onLayerChange, this);
+  		}
+
+  		if (!this.options.collapsed) {
+  			// update the height of the container after resizing the window
+  			map.on('resize', this._expandIfNotCollapsed, this);
   		}
 
   		return this._container;
@@ -4723,6 +4758,8 @@
   		for (let i = 0; i < this._layers.length; i++) {
   			this._layers[i].layer.off('add remove', this._onLayerChange, this);
   		}
+
+  		this._map.off('resize', this._expandIfNotCollapsed, this);
   	},
 
   	// @method addBaseLayer(layer: Layer, name: String): this
@@ -4769,8 +4806,13 @@
 
   	// @method collapse(): this
   	// Collapse the control container if expanded.
-  	collapse() {
-  		this._container.classList.remove('leaflet-control-layers-expanded');
+  	collapse(ev) {
+  		// On touch devices `pointerleave` is fired while clicking on a checkbox.
+  		// The control was collapsed instead of adding the layer to the map.
+  		// So we allow collapse if it is not touch and pointerleave.
+  		if (!ev || !(ev.type === 'pointerleave' && ev.pointerType === 'touch')) {
+  			this._container.classList.remove('leaflet-control-layers-expanded');
+  		}
   		return this;
   	},
 
@@ -4791,8 +4833,8 @@
   			this._map.on('click', this.collapse, this);
 
   			on(container, {
-  				mouseenter: this._expandSafely,
-  				mouseleave: this.collapse
+  				pointerenter: this._expandSafely,
+  				pointerleave: this.collapse
   			}, this);
   		}
 
@@ -4959,6 +5001,11 @@
   	},
 
   	_onInputClick() {
+  		// expanding the control on mobile with a click can cause adding a layer - we don't want this
+  		if (this._preventClick) {
+  			return;
+  		}
+
   		const inputs = this._layerControlInputs,
   		      addedLayers = [],
   		      removedLayers = [];
@@ -5017,10 +5064,12 @@
 
   	_expandSafely() {
   		const section = this._section;
+  		this._preventClick = true;
   		on(section, 'click', preventDefault);
   		this.expand();
   		setTimeout(() => {
   			off(section, 'click', preventDefault);
+  			this._preventClick = false;
   		});
   	}
 
@@ -5716,8 +5765,12 @@
   		enableImageDrag();
   		enableTextSelection();
 
-  		if (this._moved && this._moving) {
+  		const fireDragend = this._moved && this._moving;
 
+  		this._moving = false;
+  		Draggable._dragging = false;
+
+  		if (fireDragend) {
   			// @event dragend: DragEndEvent
   			// Fired when the drag ends.
   			this.fire('dragend', {
@@ -5725,9 +5778,6 @@
   				distance: this._newPos.distanceTo(this._startPos)
   			});
   		}
-
-  		this._moving = false;
-  		Draggable._dragging = false;
   	}
 
   });
@@ -6560,7 +6610,9 @@
   	 */
   	eachLayer(method, context) {
   		for (const i in this._layers) {
-  			method.call(context, this._layers[i]);
+  			if (Object.hasOwn(this._layers, i)) {
+  				method.call(context, this._layers[i]);
+  			}
   		}
   		return this;
   	},
@@ -6595,10 +6647,12 @@
   		const oldZoomSpan = this._getZoomSpan();
 
   		for (const i in this._zoomBoundLayers) {
-  			const options = this._zoomBoundLayers[i].options;
+  			if (Object.hasOwn(this._zoomBoundLayers, i)) {
+  				const options = this._zoomBoundLayers[i].options;
 
-  			minZoom = options.minZoom === undefined ? minZoom : Math.min(minZoom, options.minZoom);
-  			maxZoom = options.maxZoom === undefined ? maxZoom : Math.max(maxZoom, options.maxZoom);
+  				minZoom = options.minZoom === undefined ? minZoom : Math.min(minZoom, options.minZoom);
+  				maxZoom = options.maxZoom === undefined ? maxZoom : Math.max(maxZoom, options.maxZoom);
+  			}
   		}
 
   		this._layersMaxZoom = maxZoom === -Infinity ? undefined : maxZoom;
@@ -6710,10 +6764,12 @@
   		let i, layer;
 
   		for (i in this._layers) {
-  			layer = this._layers[i];
+  			if (Object.hasOwn(this._layers, i)) {
+  				layer = this._layers[i];
 
-  			if (layer[methodName]) {
-  				layer[methodName].apply(layer, args);
+  				if (layer[methodName]) {
+  					layer[methodName].apply(layer, args);
+  				}
   			}
   		}
 
@@ -6737,7 +6793,9 @@
   	// ```
   	eachLayer(method, context) {
   		for (const i in this._layers) {
-  			method.call(context, this._layers[i]);
+  			if (Object.hasOwn(this._layers, i)) {
+  				method.call(context, this._layers[i]);
+  			}
   		}
   		return this;
   	},
@@ -6855,8 +6913,10 @@
   		const bounds = new LatLngBounds();
 
   		for (const id in this._layers) {
-  			const layer = this._layers[id];
-  			bounds.extend(layer.getBounds ? layer.getBounds() : layer.getLatLng());
+  			if (Object.hasOwn(this._layers, id)) {
+  				const layer = this._layers[id];
+  				bounds.extend(layer.getBounds ? layer.getBounds() : layer.getLatLng());
+  			}
   		}
   		return bounds;
   	}
@@ -9345,7 +9405,7 @@
    * Used to load and display a video player over specific bounds of the map. Extends `ImageOverlay`.
    *
    * A video overlay uses the [`<video>`](https://developer.mozilla.org/docs/Web/HTML/Element/video)
-   * HTML5 element.
+   * HTML element.
    *
    * @example
    *
@@ -10716,7 +10776,7 @@
   	},
 
   	_addFocusListenersOnLayer(layer) {
-  		const el = layer.getElement();
+  		const el = typeof layer.getElement === 'function' && layer.getElement();
   		if (el) {
   			on(el, 'focus', function () {
   				this._tooltip._source = layer;
@@ -10727,7 +10787,7 @@
   	},
 
   	_setAriaDescribedByOnLayer(layer) {
-  		const el = layer.getElement();
+  		const el = typeof layer.getElement === 'function' && layer.getElement();
   		if (el) {
   			el.setAttribute('aria-describedby', this._tooltip._container.id);
   		}
@@ -10735,9 +10795,20 @@
 
 
   	_openTooltip(e) {
-  		if (!this._tooltip || !this._map || (this._map.dragging && this._map.dragging.moving())) {
+  		if (!this._tooltip || !this._map) {
   			return;
   		}
+
+  		// If the map is moving, we will show the tooltip after it's done.
+  		if (this._map.dragging && this._map.dragging.moving() && !this._openOnceFlag) {
+  			this._openOnceFlag = true;
+  			this._map.once('moveend', () => {
+  				this._openOnceFlag = false;
+  				this._openTooltip(e);
+  			});
+  			return;
+  		}
+
   		this._tooltip._source = e.layer || e.target;
 
   		this.openTooltip(this._tooltip.options.sticky ? e.latlng : undefined);
@@ -11138,6 +11209,8 @@
   		    willPrune = false;
 
   		for (const key in this._tiles) {
+  			if (!Object.hasOwn(this._tiles, key)) { continue; }
+
   			const tile = this._tiles[key];
   			if (!tile.current || !tile.loaded) { continue; }
 
@@ -11187,6 +11260,8 @@
   		if (zoom === undefined) { return undefined; }
 
   		for (let z in this._levels) {
+  			if (!Object.hasOwn(this._levels, z)) { continue; }
+
   			z = Number(z);
   			if (this._levels[z].el.children.length || z === zoom) {
   				this._levels[z].el.style.zIndex = maxZoom - Math.abs(zoom - z);
@@ -11245,11 +11320,15 @@
   		}
 
   		for (key in this._tiles) {
-  			tile = this._tiles[key];
-  			tile.retain = tile.current;
+  			if (Object.hasOwn(this._tiles, key)) {
+  				tile = this._tiles[key];
+  				tile.retain = tile.current;
+  			}
   		}
 
   		for (key in this._tiles) {
+  			if (!Object.hasOwn(this._tiles, key)) { continue; }
+
   			tile = this._tiles[key];
   			if (tile.current && !tile.active) {
   				const coords = tile.coords;
@@ -11277,15 +11356,19 @@
 
   	_removeAllTiles() {
   		for (const key in this._tiles) {
-  			this._removeTile(key);
+  			if (Object.hasOwn(this._tiles, key)) {
+  				this._removeTile(key);
+  			}
   		}
   	},
 
   	_invalidateAll() {
   		for (const z in this._levels) {
-  			this._levels[z].el.remove();
-  			this._onRemoveLevel(Number(z));
-  			delete this._levels[z];
+  			if (Object.hasOwn(this._levels, z)) {
+  				this._levels[z].el.remove();
+  				this._onRemoveLevel(Number(z));
+  				delete this._levels[z];
+  			}
   		}
   		this._removeAllTiles();
 
@@ -11406,7 +11489,9 @@
 
   	_setZoomTransforms(center, zoom) {
   		for (const i in this._levels) {
-  			this._setZoomTransform(this._levels[i], center, zoom);
+  			if (Object.hasOwn(this._levels, i)) {
+  				this._setZoomTransform(this._levels[i], center, zoom);
+  			}
   		}
   	},
 
@@ -11479,9 +11564,11 @@
   		      isFinite(tileRange.max.y))) { throw new Error('Attempted to load an infinite number of tiles'); }
 
   		for (const key in this._tiles) {
-  			const c = this._tiles[key].coords;
-  			if (c.z !== this._tileZoom || !noPruneRange.contains(new Point(c.x, c.y))) {
-  				this._tiles[key].current = false;
+  			if (Object.hasOwn(this._tiles, key)) {
+  				const c = this._tiles[key].coords;
+  				if (c.z !== this._tileZoom || !noPruneRange.contains(new Point(c.x, c.y))) {
+  					this._tiles[key].current = false;
+  				}
   			}
   		}
 
@@ -12188,19 +12275,25 @@
   		// of paths are relative to the origin pixel and therefore need to
   		// be recalculated.
   		for (const id in this._layers) {
-  			this._layers[id]._project();
+  			if (Object.hasOwn(this._layers, id)) {
+  				this._layers[id]._project();
+  			}
   		}
   	},
 
   	_updatePaths() {
   		for (const id in this._layers) {
-  			this._layers[id]._update();
+  			if (Object.hasOwn(this._layers, id)) {
+  				this._layers[id]._update();
+  			}
   		}
   	},
 
   	_onViewReset() {
   		for (const id in this._layers) {
-  			this._layers[id]._reset();
+  			if (Object.hasOwn(this._layers, id)) {
+  				this._layers[id]._reset();
+  			}
   		}
   	},
 
@@ -12307,8 +12400,10 @@
   		let layer;
   		this._redrawBounds = null;
   		for (const id in this._layers) {
-  			layer = this._layers[id];
-  			layer._update();
+  			if (Object.hasOwn(this._layers, id)) {
+  				layer = this._layers[id];
+  				layer._update();
+  			}
   		}
   		this._redraw();
   	},
@@ -13034,7 +13129,7 @@
   Map.mergeOptions({
   	// @option boxZoom: Boolean = true
   	// Whether the map can be zoomed to a rectangular area specified by
-  	// dragging the mouse while pressing the shift key.
+  	// dragging the pointer while pressing the shift key.
   	boxZoom: true
   });
 
@@ -13048,11 +13143,11 @@
   	},
 
   	addHooks() {
-  		on(this._container, 'mousedown', this._onMouseDown, this);
+  		on(this._container, 'pointerdown', this._onPointerDown, this);
   	},
 
   	removeHooks() {
-  		off(this._container, 'mousedown', this._onMouseDown, this);
+  		off(this._container, 'pointerdown', this._onPointerDown, this);
   	},
 
   	moved() {
@@ -13076,7 +13171,7 @@
   		}
   	},
 
-  	_onMouseDown(e) {
+  	_onPointerDown(e) {
   		if (!e.shiftKey || (e.button !== 0)) { return false; }
 
   		// Clear the deferred resetState if it hasn't executed yet, otherwise it
@@ -13091,13 +13186,13 @@
 
   		on(document, {
   			contextmenu: stop,
-  			mousemove: this._onMouseMove,
-  			mouseup: this._onMouseUp,
+  			pointermove: this._onPointerMove,
+  			pointerup: this._onPointerUp,
   			keydown: this._onKeyDown
   		}, this);
   	},
 
-  	_onMouseMove(e) {
+  	_onPointerMove(e) {
   		if (!this._moved) {
   			this._moved = true;
 
@@ -13129,13 +13224,13 @@
 
   		off(document, {
   			contextmenu: stop,
-  			mousemove: this._onMouseMove,
-  			mouseup: this._onMouseUp,
+  			pointermove: this._onPointerMove,
+  			pointerup: this._onPointerUp,
   			keydown: this._onKeyDown
   		}, this);
   	},
 
-  	_onMouseUp(e) {
+  	_onPointerUp(e) {
   		if (e.button !== 0) { return; }
 
   		this._finish();
@@ -13166,7 +13261,7 @@
 
   // @section Handlers
   // @property boxZoom: Handler
-  // Box (shift-drag with mouse) zoom handler.
+  // Box (shift-drag with pointer) zoom handler.
   Map.addInitHook('addHandler', 'boxZoom', BoxZoom);
 
   /*
