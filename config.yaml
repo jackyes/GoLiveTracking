@@ -20,4 +20,4 @@ TimeZone: "Europe/Rome"   #Use value from:https://en.wikipedia.org/wiki/List_of_
 MaxShowPoint: 0     # 0 for all, set te number of max track point
 ShowMapOnlyWithUser: false  #Show map only if user is passed as get parameter
 AllowBypassMaxShowPoint: true   #consent to bypass the MaxShowPoint limit using &maxshowpoint=X in GET parm
-EventRefrehTime: 5s #get update every x second
+EventRefreshTime: 5s #get update every x second
