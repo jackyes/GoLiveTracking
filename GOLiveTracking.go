@@ -1,20 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"html"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"text/template"
 	"time"
-	"sort"
-	"bytes"
-        "html"
 
 	"github.com/NYTimes/gziphandler"
 
@@ -63,7 +64,7 @@ type Cfg struct {
 	MaxShowPoint            string `yaml:"MaxShowPoint"`
 	ShowMapOnlyWithUser     bool   `yaml:"ShowMapOnlyWithUser"`
 	AllowBypassMaxShowPoint bool   `yaml:"AllowBypassMaxShowPoint"`
-	EventRefrehTime         string `yaml:"EventRefrehTime"`
+	EventRefreshTime        string `yaml:"EventRefreshTime"`
 }
 
 var AppConfig Cfg
@@ -298,21 +299,21 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 }
 
 func buildLatLonHistory(points []Point) []string {
-  // Create a buffer to store the lat/lon history
-  var latLonHistory bytes.Buffer
+	// Create a buffer to store the lat/lon history
+	var latLonHistory bytes.Buffer
 
-  // Iterate over the points and add their lat/lon coordinates to the buffer
-  for _, point := range points {
-    latLonHistory.WriteString(point.Lat + "," + point.Lon)
+	// Iterate over the points and add their lat/lon coordinates to the buffer
+	for _, point := range points {
+		latLonHistory.WriteString(point.Lat + "," + point.Lon)
 
-    // Add a comma separator if this is not the last point
-    if point != points[len(points)-1] {
-      latLonHistory.WriteString("!end!")
-    }
-  }
+		// Add a comma separator if this is not the last point
+		if point != points[len(points)-1] {
+			latLonHistory.WriteString("!end!")
+		}
+	}
 
-  // Return the lat/lon history as a slice of strings
-  return strings.Split(latLonHistory.String(), "!end!")
+	// Return the lat/lon history as a slice of strings
+	return strings.Split(latLonHistory.String(), "!end!")
 }
 
 func checkParam(param string, maxLen int) bool {
@@ -409,15 +410,14 @@ func getUserSessions(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-        w.Header().Set("Content-Type", "text/html")
-        for _, session := range sessions {
-            escapedUser := html.EscapeString(user)
-            escapedSession := html.EscapeString(session)
-            fmt.Fprintf(w, `<a href="/?user=%s&session=%s">Session %s</a><br><br>`, escapedUser, escapedSession, escapedSession)
-        }
-        
-}
+	w.Header().Set("Content-Type", "text/html")
+	for _, session := range sessions {
+		escapedUser := html.EscapeString(user)
+		escapedSession := html.EscapeString(session)
+		fmt.Fprintf(w, `<a href="/?user=%s&session=%s">Session %s</a><br><br>`, escapedUser, escapedSession, escapedSession)
+	}
 
+}
 
 func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
@@ -538,100 +538,100 @@ func sanitize(input string) string {
 	return strings.ReplaceAll(input, "\n", "")
 }
 
+// eventsHandler serves an HTTP request to stream events.
 func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-	user := r.URL.Query().Get("user")
-	session := r.URL.Query().Get("session")
-	if user == "null" {
-		user = "0"
-	} else if !isNumeric(user) {
-		fmt.Println("User not numeric")
-		return
-	} else if len(user) > AppConfig.MaxGetParmLen {
-		fmt.Println("User too big")
-		return
-	}
-	if session == "null" {
-		session = "0"
-	} else if !isNumeric(session) {
-		fmt.Println("Session not numeric")
-		return
-	} else if len(session) > AppConfig.MaxGetParmLen {
-		fmt.Println("Session too big")
-		return
-	}
-	// Set the HTTP response header
+	user, session := sanitizeInput(r)
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.WriteHeader(http.StatusOK)
-	notify := w.(http.CloseNotifier).CloseNotify()
 
-	// Infinite loop to retrieve the last position from the database every X seconds.
+	// Set refresh interval for the event stream.
+	refreshDuration, err := time.ParseDuration(AppConfig.EventRefreshTime)
+	if err != nil {
+		log.Printf("Invalid refresh duration, using default: %v\n", err)
+		refreshDuration = 5 * time.Second // Use a sensible default
+	}
+
+	ctx := r.Context()         // Use request context for handling cancellation.
+	previousPoint := &LatLng{} // Initialize previous point.
+
+	ticker := time.NewTicker(refreshDuration)
+	defer ticker.Stop()
+
 	for {
 		select {
-		case <-notify:
+		case <-ctx.Done():
+			// Client has disconnected.
 			return
-		default:
-			var query string
-			if (user != "0") && (session != "0") {
-				query = "SELECT * FROM Points WHERE USER = ? AND SESSION = ? ORDER BY ID DESC LIMIT 1"
-			} else if (user != "0") && (session == "0") {
-				query = "SELECT * FROM Points WHERE USER = ? ORDER BY ID DESC LIMIT 1"
-			} else {
-				query = "SELECT * FROM Points ORDER BY ID DESC LIMIT 1"
-			}
-
-			var point Point
-			var err error
-
-			switch {
-			case (user != "0") && (session != "0"):
-				err = db.QueryRow(query, user, session).Scan(&point.ID, &point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop, &point.User, &point.Session)
-			case (user != "0"):
-				err = db.QueryRow(query, user).Scan(&point.ID, &point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop, &point.User, &point.Session)
-			default:
-				err = db.QueryRow(query).Scan(&point.ID, &point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop, &point.User, &point.Session)
-			}
-
+		case <-ticker.C:
+			currentPoint, err := getLastKnownPosition(db, user, session)
 			if err != nil {
-				if err == sql.ErrNoRows {
-					// no such user/session exists
-					continue
-				} else {
-					http.Error(w, "Database error", http.StatusInternalServerError)
-					return
-				}
+				log.Printf("Error querying database: %v\n", err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
 			}
 
-			// Create a LatLng object with the position data
-			location := LatLng{
-				User:    point.User,
-				Session: point.Session,
-				Lat:     point.Lat,
-				Lng:     point.Lon,
-				Alt:     point.Alt,
-				Speed:   point.Speed,
-				Time:    point.Time,
-				Bear:    point.Bearing,
-				Hdop:    point.Hdop,
+			// Send location only if it's new data.
+			if currentPoint != nil && !currentPoint.Equals(previousPoint) {
+				sendLocationEvent(w, currentPoint)
+				*previousPoint = *currentPoint // Update the last sent location.
 			}
-
-			// Encode the LatLng object into JSON format
-			data, err := json.Marshal(location)
-			checkErr(err)
-
-			// Send the "location" event with the position data
-			fmt.Fprintf(w, "event: location\ndata: %s\n\n", data)
-			w.(http.Flusher).Flush()
-
-			// Wait for AppConfig.EventRefrehTime before retrieving the position from the database again.
-			d, err := time.ParseDuration(AppConfig.EventRefrehTime)
-			if err != nil {
-				fmt.Println("Error parsing EventRefrehTime from config.yaml. Using default value (15s)", err)
-				d = 15 * time.Second
-			}
-			time.Sleep(d)
 		}
+	}
+}
+
+// Add an Equals method to LatLng to compare points.
+func (p *LatLng) Equals(other *LatLng) bool {
+	return p.Lat == other.Lat && p.Lng == other.Lng && p.Alt == other.Alt && p.Speed == other.Speed && p.Time == other.Time && p.Bear == other.Bear && p.Hdop == other.Hdop
+}
+
+func sanitizeInput(r *http.Request) (user string, session string) {
+	user = r.URL.Query().Get("user")
+	session = r.URL.Query().Get("session")
+	if user == "null" || user == "" {
+		user = "0"
+	}
+	if session == "null" || session == "" {
+		session = "0"
+	}
+	return user, session
+}
+
+func getLastKnownPosition(db *sql.DB, user string, session string) (*LatLng, error) {
+	var query string
+	if user != "0" && session != "0" {
+		query = "SELECT LAT, LON, ALT, SPEED, TIME, BEARING, HDOP, USER, SESSION FROM Points WHERE USER = ? AND SESSION = ? ORDER BY ID DESC LIMIT 1"
+	} else if user != "0" {
+		query = "SELECT LAT, LON, ALT, SPEED, TIME, BEARING, HDOP, USER, SESSION FROM Points WHERE USER = ? ORDER BY ID DESC LIMIT 1"
+	} else {
+		return nil, fmt.Errorf("user and session must be specified")
+	}
+
+	// Scan the result into the LatLng struct.
+	var point LatLng
+	err := db.QueryRow(query, user, session).Scan(&point.Lat, &point.Lng, &point.Alt, &point.Speed, &point.Time, &point.Bear, &point.Hdop, &point.User, &point.Session)
+	if err != nil {
+		return nil, err
+	}
+
+	return &point, nil
+}
+
+func sendLocationEvent(w http.ResponseWriter, point *LatLng) {
+	data, err := json.Marshal(point)
+	if err != nil {
+		log.Printf("Error marshaling JSON: %v\n", err)
+		http.Error(w, "Error marshaling JSON", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(w, "event: location\ndata: %s\n\n", data)
+
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	} else {
+		log.Println("Streaming unsupported!")
 	}
 }
 
