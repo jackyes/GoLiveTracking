@@ -53,14 +53,15 @@
    <div id="distance"></div>
    <div id="map"></div>
    <script type="text/javascript">
+      const piOver180 = Math.PI / 180;
+      const R = 6371e3; // radius of Earth in meters
       var totalDistance = 0;
 
       function getDistance(lat1, lon1, lat2, lon2) {
-         const R = 6371e3; // metres
-         const φ1 = lat1 * Math.PI / 180; // φ, λ in radians
-         const φ2 = lat2 * Math.PI / 180;
-         const Δφ = (lat2 - lat1) * Math.PI / 180;
-         const Δλ = (lon2 - lon1) * Math.PI / 180;
+         const φ1 = lat1 * piOver180;
+         const φ2 = lat2 * piOver180;
+         const Δφ = (lat2 - lat1) * piOver180;
+         const Δλ = (lon2 - lon1) * piOver180;
 
          const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
             Math.cos(φ1) * Math.cos(φ2) *
