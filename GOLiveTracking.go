@@ -27,6 +27,14 @@ const configPath = "./config.yaml"
 
 var templates = template.Must(template.ParseFiles("pages/index.html"))
 
+// Prepared statements as global variables
+var (
+	stmtWithUserAndSession *sql.Stmt
+	stmtWithUserOnly       *sql.Stmt
+	stmtGetUserSessions    *sql.Stmt
+	stmtInsertPoint        *sql.Stmt
+)
+
 type Point struct {
 	ID      int
 	Lat     string
@@ -121,18 +129,31 @@ type GPXPoint struct {
 }
 
 func main() {
+	// Load the application configuration
 	ReadConfig()
+
+	// Check if the database exists and create it if it doesn't
 	if _, err := os.Stat("./sqlite-database.db"); os.IsNotExist(err) {
 		CreateDB()
 	}
+
+	// Open a database connection
 	db, err := sql.Open("sqlite3", "sqlite-database.db")
 	if err != nil {
 		checkErr(err)
 	}
-	defer db.Close()
+	defer db.Close() // Ensure the database connection is closed when the main function exits
+
+	// Ping the database to ensure it's ready to accept connections
 	if err = db.Ping(); err != nil {
 		checkErr(err)
 	}
+
+	// Initialize prepared statements
+	if err = InitDB(db); err != nil {
+		checkErr(err)
+	}
+	defer CloseDB() // Ensure the prepared statements are closed when the main function exits
 
 	mux := http.NewServeMux()
 
@@ -140,13 +161,13 @@ func main() {
 	mux.HandleFunc("/resetpoint", func(w http.ResponseWriter, r *http.Request) { getResetPoint(w, r, db) })
 	mux.HandleFunc("/reset", func(w http.ResponseWriter, r *http.Request) { getResetPointUsrSession(w, r, db) })
 	mux.HandleFunc("/download-gpx", func(w http.ResponseWriter, r *http.Request) { getGpxTrack(w, r, db) })
-	mux.HandleFunc("/getusersession", func(w http.ResponseWriter, r *http.Request) { getUserSessions(w, r, db) })
+	mux.HandleFunc("/getusersession", func(w http.ResponseWriter, r *http.Request) { getUserSessions(w, r) })
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("static")))
 	mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=604800")
 		staticHandler.ServeHTTP(w, r)
 	}))
-	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) { eventsHandler(w, r, db) })
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) { eventsHandler(w, r) })
 	mux.HandleFunc("/favicon.ico", faviconHandler)
 	mux.Handle("/", gziphandler.GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { IndexHandler(w, r, db) })))
 
@@ -159,6 +180,36 @@ func main() {
 			fmt.Println(err)
 		}
 	}
+}
+
+func InitDB(db *sql.DB) error {
+	// Initialize the prepared statement when your application starts
+	var err error
+	stmtWithUserAndSession, err = db.Prepare("SELECT LAT, LON, ALT, SPEED, TIME, BEARING, HDOP, USER, SESSION FROM Points WHERE USER = ? AND SESSION = ? ORDER BY ID DESC LIMIT 1")
+	if err != nil {
+		return err
+	}
+	stmtWithUserOnly, err = db.Prepare("SELECT LAT, LON, ALT, SPEED, TIME, BEARING, HDOP, USER, SESSION FROM Points WHERE USER = ? ORDER BY ID DESC LIMIT 1")
+	if err != nil {
+		stmtWithUserAndSession.Close() // Close the previously prepared statement if the second fails
+		return err
+	}
+	stmtGetUserSessions, err = db.Prepare("SELECT DISTINCT SESSION FROM Points WHERE USER = ?")
+	if err != nil {
+		return err
+	}
+	stmtInsertPoint, err = db.Prepare("INSERT INTO Points(LAT, LON, ALT, SPEED, TIME, BEARING, HDOP, USER, SESSION) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func CloseDB() {
+	stmtWithUserAndSession.Close()
+	stmtWithUserOnly.Close()
+	stmtGetUserSessions.Close()
+	stmtInsertPoint.Close()
 }
 
 func faviconHandler(w http.ResponseWriter, r *http.Request) {
@@ -368,29 +419,26 @@ func getResetPointUsrSession(w http.ResponseWriter, r *http.Request, db *sql.DB)
 	w.Write([]byte("OK"))
 }
 
-func getUserSessions(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+// getUserSessions retrieves user sessions and writes them as links in the response.
+func getUserSessions(w http.ResponseWriter, r *http.Request) {
+	// Authenticate the request.
 	key := r.URL.Query().Get("key")
 	if key != AppConfig.Key {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
+	// Validate the 'user' parameter.
 	user := r.URL.Query().Get("user")
 	if !checkParam(user, AppConfig.MaxGetParmLen) {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
 
-	stmt, err := db.Prepare("SELECT DISTINCT SESSION FROM Points WHERE USER = ?")
+	// Query the database for sessions associated with the user.
+	rows, err := stmtGetUserSessions.Query(user)
 	if err != nil {
-		checkErr(err)
-		return
-	}
-	defer stmt.Close()
-
-	rows, err := stmt.Query(user)
-	if err != nil {
-		checkErr(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -410,13 +458,13 @@ func getUserSessions(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
+	// Set the response header and write the session links.
 	w.Header().Set("Content-Type", "text/html")
+	escapedUser := html.EscapeString(user) // Escape once.
 	for _, session := range sessions {
-		escapedUser := html.EscapeString(user)
 		escapedSession := html.EscapeString(session)
 		fmt.Fprintf(w, `<a href="/?user=%s&session=%s">Session %s</a><br><br>`, escapedUser, escapedSession, escapedSession)
 	}
-
 }
 
 func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
@@ -521,17 +569,33 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 	//data verification finish...
 
+	// Begin transaction
+	tx, err := db.Begin()
+	if err != nil {
+		http.Error(w, "Server Error", http.StatusInternalServerError)
+		log.Println("Transaction start error:", err)
+		return
+	}
+
+	// Execute the prepared statement
+	_, err = tx.Stmt(stmtInsertPoint).Exec(lat, lon, altitude, speed, timestamp, bearing, hdop, user, session)
+	if err != nil {
+		tx.Rollback()
+		http.Error(w, "Server Error", http.StatusInternalServerError)
+		log.Println("Insert exec error:", err)
+		return
+	}
+
+	// Commit the transaction
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "Server Error", http.StatusInternalServerError)
+		log.Println("Transaction commit error:", err)
+		return
+	}
+
+	// Send back a successful response
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
-
-	tx, err := db.Begin()
-	checkErr(err)
-	stmt, err := tx.Prepare("insert into Points(LAT, LON, ALT, SPEED, TIME, BEARING, HDOP, USER, SESSION) values(?, ?, ?, ?, ?, ?, ?, ?, ?)")
-	checkErr(err)
-	defer stmt.Close()
-	_, err = stmt.Exec(lat, lon, altitude, speed, timestamp, bearing, hdop, user, session)
-	checkErr(err)
-	tx.Commit()
 }
 
 func sanitize(input string) string {
@@ -539,7 +603,7 @@ func sanitize(input string) string {
 }
 
 // eventsHandler serves an HTTP request to stream events.
-func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+func eventsHandler(w http.ResponseWriter, r *http.Request) {
 	user, session := sanitizeInput(r)
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -565,7 +629,7 @@ func eventsHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			// Client has disconnected.
 			return
 		case <-ticker.C:
-			currentPoint, err := getLastKnownPosition(db, user, session)
+			currentPoint, err := getLastKnownPosition(user, session)
 			if err != nil {
 				log.Printf("Error querying database: %v\n", err)
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -598,19 +662,27 @@ func sanitizeInput(r *http.Request) (user string, session string) {
 	return user, session
 }
 
-func getLastKnownPosition(db *sql.DB, user string, session string) (*LatLng, error) {
-	var query string
-	if user != "0" && session != "0" {
-		query = "SELECT LAT, LON, ALT, SPEED, TIME, BEARING, HDOP, USER, SESSION FROM Points WHERE USER = ? AND SESSION = ? ORDER BY ID DESC LIMIT 1"
-	} else if user != "0" {
-		query = "SELECT LAT, LON, ALT, SPEED, TIME, BEARING, HDOP, USER, SESSION FROM Points WHERE USER = ? ORDER BY ID DESC LIMIT 1"
+// getLastKnownPosition retrieves the last known position for a user and session from the database.
+func getLastKnownPosition(user string, session string) (*LatLng, error) {
+	
+	if user == "0" {
+		return nil, fmt.Errorf("user must be specified")
+	}
+
+	// Decide which prepared statement to use based on the session value
+	var stmt *sql.Stmt
+	var args []interface{}
+	if session != "0" {
+		stmt = stmtWithUserAndSession
+		args = []interface{}{user, session}
 	} else {
-		return nil, fmt.Errorf("user and session must be specified")
+		stmt = stmtWithUserOnly
+		args = []interface{}{user}
 	}
 
 	// Scan the result into the LatLng struct.
 	var point LatLng
-	err := db.QueryRow(query, user, session).Scan(&point.Lat, &point.Lng, &point.Alt, &point.Speed, &point.Time, &point.Bear, &point.Hdop, &point.User, &point.Session)
+	err := stmt.QueryRow(args...).Scan(&point.Lat, &point.Lng, &point.Alt, &point.Speed, &point.Time, &point.Bear, &point.Hdop, &point.User, &point.Session)
 	if err != nil {
 		return nil, err
 	}
