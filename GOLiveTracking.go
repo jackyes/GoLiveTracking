@@ -33,6 +33,7 @@ var (
 	stmtWithUserOnly       *sql.Stmt
 	stmtGetUserSessions    *sql.Stmt
 	stmtInsertPoint        *sql.Stmt
+	stmtFetchGpsTrack      *sql.Stmt
 )
 
 type Point struct {
@@ -202,6 +203,11 @@ func InitDB(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	stmtFetchGpsTrack, err = db.Prepare("SELECT LAT, LON, ALT, TIME FROM Points WHERE user = ? AND session = ?")
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -210,6 +216,7 @@ func CloseDB() {
 	stmtWithUserOnly.Close()
 	stmtGetUserSessions.Close()
 	stmtInsertPoint.Close()
+	stmtFetchGpsTrack.Close()
 }
 
 func faviconHandler(w http.ResponseWriter, r *http.Request) {
@@ -306,7 +313,7 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 
 	stmt, err := db.Prepare(query)
 	if err != nil {
-		 checkErr(err)
+		checkErr(err)
 	}
 	defer stmt.Close()
 
@@ -320,7 +327,7 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 
 	rows, err := stmt.Query(args...)
 	if err != nil {
-		 checkErr(err)
+		checkErr(err)
 	}
 	defer rows.Close()
 
@@ -329,7 +336,7 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	for rows.Next() {
 		var point Point
 		if err := rows.Scan(&point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop); err != nil {
-			 checkErr(err)
+			checkErr(err)
 		}
 		points = append(points, point)
 	}
@@ -343,7 +350,7 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	}
 
 	if err := rows.Err(); err != nil {
-		 checkErr(err)
+		checkErr(err)
 	}
 
 	return points
@@ -664,7 +671,7 @@ func sanitizeInput(r *http.Request) (user string, session string) {
 
 // getLastKnownPosition retrieves the last known position for a user and session from the database.
 func getLastKnownPosition(user string, session string) (*LatLng, error) {
-	
+
 	if user == "0" {
 		return nil, nil
 	}
@@ -708,91 +715,90 @@ func sendLocationEvent(w http.ResponseWriter, point *LatLng) {
 }
 
 func getGpxTrack(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-    // Validate key, user, and session parameters
-    if err := validateRequestParameters(r); err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
-        return
-    }
+	// Validate key, user, and session parameters
+	if err := validateRequestParameters(r); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-    user := r.URL.Query().Get("user")
-    session := r.URL.Query().Get("session")
-    if session == "" {
-        session = "0"
-    }
+	user := r.URL.Query().Get("user")
+	session := r.URL.Query().Get("session")
+	if session == "" {
+		session = "0"
+	}
 
-    // Fetch GPS track data
-    points, err := fetchGpsTrack(db, user, session)
-    if err != nil {
-        http.Error(w, "Query error", http.StatusInternalServerError)
-        return
-    }
+	// Fetch GPS track data
+	points, err := fetchGpsTrack(db, user, session)
+	if err != nil {
+		http.Error(w, "Query error", http.StatusInternalServerError)
+		return
+	}
 
-    // Create GPX structure and populate it with track data
-    gpx := createGpxStructure("GoLiveTracking", points)
+	// Create GPX structure and populate it with track data
+	gpx := createGpxStructure("GoLiveTracking", points)
 
-    // Write the GPX file as the HTTP response
-    writeGpxResponse(w, gpx)
+	// Write the GPX file as the HTTP response
+	writeGpxResponse(w, gpx)
 }
 
 func validateRequestParameters(r *http.Request) error {
-    key := r.URL.Query().Get("key")
-    if key != AppConfig.Key {
-        return fmt.Errorf(http.StatusText(http.StatusUnauthorized))
-    }
+	key := r.URL.Query().Get("key")
+	if key != AppConfig.Key {
+		return fmt.Errorf(http.StatusText(http.StatusUnauthorized))
+	}
 
-    user := r.URL.Query().Get("user")
-    if user == "" || !isNumeric(user) || len(user) > AppConfig.MaxGetParmLen {
-        return fmt.Errorf("Invalid user parameter")
-    }
+	user := r.URL.Query().Get("user")
+	if user == "" || !isNumeric(user) || len(user) > AppConfig.MaxGetParmLen {
+		return fmt.Errorf("Invalid user parameter")
+	}
 
-    session := r.URL.Query().Get("session")
-    if session != "" && (!isNumeric(session) || len(session) > AppConfig.MaxGetParmLen) {
-        return fmt.Errorf("Invalid session parameter")
-    }
+	session := r.URL.Query().Get("session")
+	if session != "" && (!isNumeric(session) || len(session) > AppConfig.MaxGetParmLen) {
+		return fmt.Errorf("Invalid session parameter")
+	}
 
-    return nil
+	return nil
 }
 
 func fetchGpsTrack(db *sql.DB, user, session string) ([]GPXPoint, error) {
-    query := `SELECT LAT, LON, ALT, TIME FROM Points WHERE user = ? AND session = ?`
-    rows, err := db.Query(query, user, session)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
+	var points []GPXPoint
 
-    var points []GPXPoint
-    for rows.Next() {
-        var p GPXPoint
-        if err := rows.Scan(&p.Latitude, &p.Longitude, &p.Elevation, &p.Time); err != nil {
-            return nil, err
-        }
-        points = append(points, p)
-    }
+	rows, err := stmtFetchGpsTrack.Query(user, session)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-    if err := rows.Err(); err != nil {
-        return nil, err
-    }
+	for rows.Next() {
+		var p GPXPoint
+		if err := rows.Scan(&p.Latitude, &p.Longitude, &p.Elevation, &p.Time); err != nil {
+			return nil, err
+		}
+		points = append(points, p)
+	}
 
-    return points, nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return points, nil
 }
 
 func createGpxStructure(creator string, points []GPXPoint) GPX {
-    track := Track{Name: "GPS Track", Segments: []Segment{{Points: points}}}
-    return GPX{Version: "1.1", Creator: creator, Tracks: []Track{track}}
+	track := Track{Name: "GPS Track", Segments: []Segment{{Points: points}}}
+	return GPX{Version: "1.1", Creator: creator, Tracks: []Track{track}}
 }
 
 func writeGpxResponse(w http.ResponseWriter, gpx GPX) {
-    w.Header().Set("Content-Disposition", "attachment; filename=my_gps_track.gpx")
-    w.Header().Set("Content-Type", "application/gpx+xml")
+	w.Header().Set("Content-Disposition", "attachment; filename=my_gps_track.gpx")
+	w.Header().Set("Content-Type", "application/gpx+xml")
 
-    enc := xml.NewEncoder(w)
-    enc.Indent("", "    ")
-    if err := enc.Encode(gpx); err != nil {
-        http.Error(w, "Error writing GPX file", http.StatusInternalServerError)
-    }
+	enc := xml.NewEncoder(w)
+	enc.Indent("", "    ")
+	if err := enc.Encode(gpx); err != nil {
+		http.Error(w, "Error writing GPX file", http.StatusInternalServerError)
+	}
 }
-
 
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 	err := templates.ExecuteTemplate(w, tmpl+".html", p)
@@ -858,15 +864,15 @@ func checkErr(err error, args ...string) {
 }
 
 func isValidCoordinates(lat, lon string) bool {
-    latFloat, errLat := strconv.ParseFloat(lat, 64)
-    if errLat != nil {
-        return false
-    }
+	latFloat, errLat := strconv.ParseFloat(lat, 64)
+	if errLat != nil {
+		return false
+	}
 
-    lonFloat, errLon := strconv.ParseFloat(lon, 64)
-    if errLon != nil {
-        return false
-    }
+	lonFloat, errLon := strconv.ParseFloat(lon, 64)
+	if errLon != nil {
+		return false
+	}
 
-    return latFloat >= -90 && latFloat <= 90 && lonFloat >= -180 && lonFloat <= 180
+	return latFloat >= -90 && latFloat <= 90 && lonFloat >= -180 && lonFloat <= 180
 }
