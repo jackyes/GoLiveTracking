@@ -824,7 +824,6 @@ func TimeStampConvert(e string) (dtime time.Time) {
 		fmt.Println(err)
 	}
 	dtime = time.Unix(data/1000, 0).In(loc)
-	fmt.Println(dtime)
 	return dtime
 }
 
@@ -852,8 +851,15 @@ func checkErr(err error, args ...string) {
 }
 
 func isValidCoordinates(lat, lon string) bool {
-	latFloat, errLat := strconv.ParseFloat(lat, 64)
-	lonFloat, errLon := strconv.ParseFloat(lon, 64)
+    latFloat, errLat := strconv.ParseFloat(lat, 64)
+    if errLat != nil {
+        return false
+    }
 
-	return latFloat >= -90 && latFloat <= 90 && lonFloat >= -180 && lonFloat <= 180 && errLat == nil && errLon == nil
+    lonFloat, errLon := strconv.ParseFloat(lon, 64)
+    if errLon != nil {
+        return false
+    }
+
+    return latFloat >= -90 && latFloat <= 90 && lonFloat >= -180 && lonFloat <= 180
 }
