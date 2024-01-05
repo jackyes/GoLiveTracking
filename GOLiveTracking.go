@@ -848,12 +848,34 @@ func isSafeString(str string) bool {
 }
 
 func CreateDB() {
-	db, err := sql.Open("sqlite3", "sqlite-database.db")
-	checkErr(err)
+    db, err := sql.Open("sqlite3", "sqlite-database.db")
+    checkErr(err)
 
-	// create table
-	_, err = db.Exec("create table Points (ID integer NOT NULL PRIMARY KEY AUTOINCREMENT, LAT string not null, LON string not null, ALT string not null, SPEED string not null, TIME string not null, BEARING string not null, HDOP string not null, USER string not null, SESSION string not null); delete from Points;")
-	checkErr(err)
+    // Crea la tabella Points
+    _, err = db.Exec(`
+        CREATE TABLE Points (
+            ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, 
+            LAT STRING NOT NULL, 
+            LON STRING NOT NULL, 
+            ALT STRING NOT NULL, 
+            SPEED STRING NOT NULL, 
+            TIME STRING NOT NULL, 
+            BEARING STRING NOT NULL, 
+            HDOP STRING NOT NULL, 
+            USER STRING NOT NULL, 
+            SESSION STRING NOT NULL
+        );
+    `)
+    checkErr(err)
+
+    _, err = db.Exec("CREATE INDEX idx_user ON Points(USER);")
+    checkErr(err)
+
+    _, err = db.Exec("CREATE INDEX idx_session ON Points(SESSION);")
+    checkErr(err)
+
+    _, err = db.Exec("CREATE INDEX idx_user_session ON Points(USER, SESSION);")
+    checkErr(err)
 }
 
 func checkErr(err error, args ...string) {
