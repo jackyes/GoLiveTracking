@@ -306,7 +306,7 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 
 	stmt, err := db.Prepare(query)
 	if err != nil {
-		// checkErr(err)
+		 checkErr(err)
 	}
 	defer stmt.Close()
 
@@ -320,7 +320,7 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 
 	rows, err := stmt.Query(args...)
 	if err != nil {
-		// checkErr(err)
+		 checkErr(err)
 	}
 	defer rows.Close()
 
@@ -329,7 +329,7 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	for rows.Next() {
 		var point Point
 		if err := rows.Scan(&point.Lat, &point.Lon, &point.Alt, &point.Speed, &point.Time, &point.Bearing, &point.Hdop); err != nil {
-			// checkErr(err)
+			 checkErr(err)
 		}
 		points = append(points, point)
 	}
@@ -343,7 +343,7 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	}
 
 	if err := rows.Err(); err != nil {
-		// checkErr(err)
+		 checkErr(err)
 	}
 
 	return points
@@ -666,7 +666,7 @@ func sanitizeInput(r *http.Request) (user string, session string) {
 func getLastKnownPosition(user string, session string) (*LatLng, error) {
 	
 	if user == "0" {
-		return nil, fmt.Errorf("user must be specified")
+		return nil, nil
 	}
 
 	// Decide which prepared statement to use based on the session value
