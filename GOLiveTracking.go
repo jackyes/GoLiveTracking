@@ -850,6 +850,7 @@ func isSafeString(str string) bool {
 func CreateDB() {
     db, err := sql.Open("sqlite3", "sqlite-database.db")
     checkErr(err)
+    fmt.Println("Database connection established.")
 
     // Crea la tabella Points
     _, err = db.Exec(`
@@ -867,16 +868,33 @@ func CreateDB() {
         );
     `)
     checkErr(err)
+    fmt.Println("Table 'Points' created successfully.")
 
     _, err = db.Exec("CREATE INDEX idx_user ON Points(USER);")
     checkErr(err)
+    fmt.Println("Index 'idx_user' created successfully.")
 
     _, err = db.Exec("CREATE INDEX idx_session ON Points(SESSION);")
     checkErr(err)
+    fmt.Println("Index 'idx_session' created successfully.")
 
     _, err = db.Exec("CREATE INDEX idx_user_session ON Points(USER, SESSION);")
     checkErr(err)
+    fmt.Println("Index 'idx_user_session' created successfully.")
+
+    rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='index';")
+    checkErr(err)
+    defer rows.Close()
+
+    var indexName string
+    for rows.Next() {
+        err := rows.Scan(&indexName)
+        checkErr(err)
+        fmt.Println("Found index:", indexName)
+    }
+    fmt.Println("Index verification completed.")
 }
+
 
 func checkErr(err error, args ...string) {
 	if err != nil {
