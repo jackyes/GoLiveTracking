@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"encoding/xml"
@@ -291,7 +290,7 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 		reverseOrder = "DESC"
 	} else if AppConfig.MaxShowPoint != "0" {
 		limit = " LIMIT ?"
-		reverseOrder = "DESC"
+		reverseOrder = "ASC"
 	}
 
 	var whereClause strings.Builder
@@ -306,10 +305,10 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	}
 
 	query := fmt.Sprintf(`
-		SELECT lat, lon, alt, speed, time, bearing, hdop
-		FROM Points %s
-		ORDER BY ID %s
-		%s`, whereClause.String(), reverseOrder, limit)
+                SELECT lat, lon, alt, speed, time, bearing, hdop
+                FROM Points %s
+                ORDER BY ID %s
+                %s`, whereClause.String(), reverseOrder, limit)
 
 	stmt, err := db.Prepare(query)
 	if err != nil {
@@ -357,21 +356,20 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 }
 
 func buildLatLonHistory(points []Point) []string {
-	// Create a buffer to store the lat/lon history
-	var latLonHistory bytes.Buffer
+	// Use strings.Builder for efficient string concatenation
+	var latLonHistory strings.Builder
 
-	// Iterate over the points and add their lat/lon coordinates to the buffer
-	for _, point := range points {
+	// Iterate over the points and append each coordinate pair
+	for i, point := range points {
 		latLonHistory.WriteString(point.Lat + "," + point.Lon)
 
-		// Add a comma separator if this is not the last point
-		if point != points[len(points)-1] {
-			latLonHistory.WriteString("!end!")
+		// Append a comma separator unless it's the last element in the list
+		if i < len(points)-1 {
+			latLonHistory.WriteRune('!')
 		}
 	}
 
-	// Return the lat/lon history as a slice of strings
-	return strings.Split(latLonHistory.String(), "!end!")
+	return strings.Split(latLonHistory.String(), "!")
 }
 
 func checkParam(param string, maxLen int) bool {
@@ -848,53 +846,52 @@ func isSafeString(str string) bool {
 }
 
 func CreateDB() {
-    db, err := sql.Open("sqlite3", "sqlite-database.db")
-    checkErr(err)
-    fmt.Println("Database connection established.")
+	db, err := sql.Open("sqlite3", "sqlite-database.db")
+	checkErr(err)
+	fmt.Println("Database connection established.")
 
-    // Crea la tabella Points
-    _, err = db.Exec(`
+	// Crea la tabella Points
+	_, err = db.Exec(`
         CREATE TABLE Points (
-            ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, 
-            LAT STRING NOT NULL, 
-            LON STRING NOT NULL, 
-            ALT STRING NOT NULL, 
-            SPEED STRING NOT NULL, 
-            TIME STRING NOT NULL, 
-            BEARING STRING NOT NULL, 
-            HDOP STRING NOT NULL, 
-            USER STRING NOT NULL, 
+            ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            LAT STRING NOT NULL,
+            LON STRING NOT NULL,
+            ALT STRING NOT NULL,
+            SPEED STRING NOT NULL,
+            TIME STRING NOT NULL,
+            BEARING STRING NOT NULL,
+            HDOP STRING NOT NULL,
+            USER STRING NOT NULL,
             SESSION STRING NOT NULL
         );
     `)
-    checkErr(err)
-    fmt.Println("Table 'Points' created successfully.")
+	checkErr(err)
+	fmt.Println("Table 'Points' created successfully.")
 
-    _, err = db.Exec("CREATE INDEX idx_user ON Points(USER);")
-    checkErr(err)
-    fmt.Println("Index 'idx_user' created successfully.")
+	_, err = db.Exec("CREATE INDEX idx_user ON Points(USER);")
+	checkErr(err)
+	fmt.Println("Index 'idx_user' created successfully.")
 
-    _, err = db.Exec("CREATE INDEX idx_session ON Points(SESSION);")
-    checkErr(err)
-    fmt.Println("Index 'idx_session' created successfully.")
+	_, err = db.Exec("CREATE INDEX idx_session ON Points(SESSION);")
+	checkErr(err)
+	fmt.Println("Index 'idx_session' created successfully.")
 
-    _, err = db.Exec("CREATE INDEX idx_user_session ON Points(USER, SESSION);")
-    checkErr(err)
-    fmt.Println("Index 'idx_user_session' created successfully.")
+	_, err = db.Exec("CREATE INDEX idx_user_session ON Points(USER, SESSION);")
+	checkErr(err)
+	fmt.Println("Index 'idx_user_session' created successfully.")
 
-    rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='index';")
-    checkErr(err)
-    defer rows.Close()
+	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='index';")
+	checkErr(err)
+	defer rows.Close()
 
-    var indexName string
-    for rows.Next() {
-        err := rows.Scan(&indexName)
-        checkErr(err)
-        fmt.Println("Found index:", indexName)
-    }
-    fmt.Println("Index verification completed.")
+	var indexName string
+	for rows.Next() {
+		err := rows.Scan(&indexName)
+		checkErr(err)
+		fmt.Println("Found index:", indexName)
+	}
+	fmt.Println("Index verification completed.")
 }
-
 
 func checkErr(err error, args ...string) {
 	if err != nil {
