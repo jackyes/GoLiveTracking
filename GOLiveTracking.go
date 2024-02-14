@@ -642,7 +642,7 @@ func eventsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Send location only if it's new data.
-			if currentPoint != nil && !currentPoint.Equals(previousPoint) {
+			if currentPoint != nil && !currentPoint.Equal(previousPoint) {
 				sendLocationEvent(w, currentPoint)
 				*previousPoint = *currentPoint // Update the last sent location.
 			}
@@ -650,9 +650,9 @@ func eventsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Add an Equals method to LatLng to compare points.
-func (p *LatLng) Equals(other *LatLng) bool {
-	return p.Lat == other.Lat && p.Lng == other.Lng && p.Alt == other.Alt && p.Speed == other.Speed && p.Time == other.Time && p.Bear == other.Bear && p.Hdop == other.Hdop
+// Equal checks if this point equals another one.
+func (a *LatLng) Equal(b *LatLng) bool {
+	return a.Lat == b.Lat && a.Lng == b.Lng && a.Alt == b.Alt && a.Speed == b.Speed && a.Time == b.Time && a.Bear == b.Bear && a.Hdop == b.Hdop
 }
 
 func sanitizeInput(r *http.Request) (user string, session string) {
@@ -695,18 +695,21 @@ func getLastKnownPosition(user string, session string) (*LatLng, error) {
 	return &point, nil
 }
 
+// sendLocationEvent is a function that sends an event containing location information.
 func sendLocationEvent(w http.ResponseWriter, point *LatLng) {
+	// Marshals (convert into JSON format) lat lng data and checks if there are any errors during the process
 	data, err := json.Marshal(point)
-	if err != nil {
-		log.Printf("Error marshaling JSON: %v\n", err)
-		http.Error(w, "Error marshaling JSON", http.StatusInternalServerError)
+	if err != nil { // If error occurs while marshaling...
+		log.Printf("Error marshaling JSON: %v\n", err)                         // Log this unexpected event for debugging purpose
+		http.Error(w, "Error marshaling JSON", http.StatusInternalServerError) // Return an internal server error to the client
 		return
 	}
-
+	// Write a response in SSE (Server-Sent Events format):  'event' field set as location and data containing our Marshaled LatLng struct
 	fmt.Fprintf(w, "event: location\ndata: %s\n\n", data)
 
-	if flusher, ok := w.(http.Flusher); ok {
-		flusher.Flush()
+	// Check if the http response writer supports flusher interface (required for Server-Sent Events streaming).  If it does not support this functionality...
+	if flusher, ok := w.(http.Flusher); ok { // Attempt to get a reference of Flusher from ResponseWriter
+		flusher.Flush() // Flush any buffered data immediately in case we want server send event as soon as possible
 	} else {
 		log.Println("Streaming unsupported!")
 	}
@@ -825,17 +828,21 @@ func ReadConfig() {
 	}
 }
 
+// This function converts a given timestamp string into time format based on application configured timezone.
 func TimeStampConvert(e string) (dtime time.Time) {
+	// Parsing inputted String to Int64, assuming the provided 'string' is in base-10 representation of integer
 	data, err := strconv.ParseInt(e, 10, 64)
-	if err != nil {
+	if err != nil { // If there were any errors during parsing operation then it prints out error and returns zero value for time.
 		fmt.Println(err)
 	}
+	// Loading location based on the application configured timezone
 	loc, err := time.LoadLocation(AppConfig.TimeZone)
-	if err != nil {
+	if err != nil { // If there were any errors during loading operation then it prints out error and returns zero value for time.
 		fmt.Println(err)
 	}
-	dtime = time.Unix(data/1000, 0).In(loc)
-	return dtime
+	// Converting the parsed Int64 data into Unix timestamp, dividing by '1000' to convert milliseconds since epoch to seconds because ParseInt function parses till it encounters a non-digit character and returns integer value until that moment which might be in millisecond format.
+	dtime = time.Unix(data/1000, 0).In(loc) // 'dtime' variable will hold the converted date based on application configured timezone location after this operation is completed successfully without any errors during parsing or loading operations beforehand .
+	return dtime                            // Returning final computed Unix timestamp in specific Timezone.
 }
 
 func isSafeString(str string) bool {
@@ -900,16 +907,20 @@ func checkErr(err error, args ...string) {
 	}
 }
 
+// Function that validates if given latitude and longitude values are within the valid range for GPS coordinates.
 func isValidCoordinates(lat, lon string) bool {
+	// Convert Latitude from String to Float64 type
 	latFloat, errLat := strconv.ParseFloat(lat, 64)
-	if errLat != nil {
+	if errLat != nil { // If conversion fails return false indicating invalid latitude value is	invalid so return False
 		return false
 	}
 
+	// Convert Longitude from string to float64	type
 	lonFloat, errLon := strconv.ParseFloat(lon, 64)
-	if errLon != nil {
+	if errLon != nil { // if the conversion is unsuccessful then it indicates that longitude value is invalid so return False
 		return false
 	}
 
+	// Check and validate	the	input	data	to see	it falls	in	a	valide	gps coordinate range
 	return latFloat >= -90 && latFloat <= 90 && lonFloat >= -180 && lonFloat <= 180
 }
