@@ -11,7 +11,7 @@ WORKDIR /root/
 COPY . .
 COPY --from=builder /app/GOLiveTracking .
 
-RUN adduser -D -g "" appuser
+RUN adduser --disabled-password --gecos "" appuser
 USER appuser
 
 EXPOSE 8080
