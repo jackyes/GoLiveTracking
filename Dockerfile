@@ -2,6 +2,7 @@ FROM golang:latest AS builder
 WORKDIR /app
 COPY . .
 RUN apt update && apt install -y git gcc build-essential
+RUN go get -u -v all
 RUN go mod download
 RUN CGO_ENABLED=1 go build -o GOLiveTracking .
 
