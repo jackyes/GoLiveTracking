@@ -1,183 +1,199 @@
 <!DOCTYPE html>
-
 <html lang="en">
-
 <head>
-   <title>Live Tracking</title>
-   <link rel="preconnect" href="https://cdn.statically.io">
-   <link rel="preconnect" href="https://a.tile.openstreetmap.org">
-   <link rel="preconnect" href="https://b.tile.openstreetmap.org">
-   <link rel="preconnect" href="https://c.tile.openstreetmap.org">
-   <link rel="stylesheet" href="https://cdn.statically.io/gh/jackyes/GoLiveTracking/main/static/leaflet.min.css" media="none" onload="if(media!='all')media='all'">
-   <script src="https://cdn.statically.io/gh/jackyes/GoLiveTracking/main/static/leaflet.min.js"></script>
-   <style type="text/css">
-      html, body {
-        height: 100%;
-        margin: 0;
-      }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Tracking</title>
+    <link rel="preconnect" href="https://cdn.statically.io">
+    <link rel="preconnect" href="https://a.tile.openstreetmap.org">
+    <link rel="preconnect" href="https://b.tile.openstreetmap.org">
+    <link rel="preconnect" href="https://c.tile.openstreetmap.org">
+    <link rel="stylesheet" href="https://cdn.statically.io/gh/jackyes/GoLiveTracking/main/static/leaflet.min.css" media="none" onload="if(media!='all')media='all'">
+    <script src="https://cdn.statically.io/gh/jackyes/GoLiveTracking/main/static/leaflet.min.js"></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+        }
 
-      #map {
-        height: 100%
-      }
+        #map {
+            flex-grow: 1;
+        }
 
-      .button-container {
-         display: flex;
-         height: 40px;
-      }
+        .button-container {
+            display: flex;
+            justify-content: center;
+            padding: 10px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
 
-      #btn-stop,
-      #btn-resume {
-         width: 100%;
-         height: 100%;
-      }
+        .button-container button {
+            flex: 1;
+            padding: 10px;
+            margin: 0 5px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
 
-      #btn-stop {
-         background-color: red;
-         margin-right: 5px;
-      }
+        #btn-stop {
+            background-color: #e74c3c;
+            color: white;
+        }
 
-      #btn-resume {
-         background-color: green;
-         color: white;
-      }
-   </style>
-   <meta http-equiv="refresh" content="{{.MapRefreshTime}}">
-   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        #btn-resume {
+            background-color: #2ecc71;
+            color: white;
+        }
+
+        #btn-stop:hover {
+            background-color: #c0392b;
+        }
+
+        #btn-resume:hover {
+            background-color: #27ae60;
+        }
+
+        #distance {
+            padding: 10px;
+            text-align: center;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+    <meta http-equiv="refresh" content="{{.MapRefreshTime}}">
 </head>
-
 <body>
-   <div class="button-container">
-      <button id="btn-stop" onclick="stopLT()">Stop Live Tracking Updating</button>
-      <button id="btn-resume" onclick="location.reload()">Resume Live Tracking Updating - Refresh in:<span id="countdown"></span></button>
-   </div>
-   <div id="distance"></div>
-   <div id="map"></div>
-   <script type="text/javascript">
-      const piOver180 = Math.PI / 180;
-      const R = 6371e3; // radius of Earth in meters
-      var totalDistance = 0;
+    <div class="button-container">
+        <button id="btn-stop" onclick="stopLT()">Stop Live Tracking</button>
+        <button id="btn-resume" onclick="location.reload()">Resume Live Tracking - Refresh in: <span id="countdown"></span></button>
+    </div>
+    <div id="distance"></div>
+    <div id="map"></div>
+    <script>
+        const piOver180 = Math.PI / 180;
+        const R = 6371e3; // radius of Earth in meters
+        let totalDistance = 0;
+        const latlngs = {{ if .ShowOnlyLastPos }} [] {{ else }} [{{ range .Latlonhistory }}[{{.}}], {{ end }}] {{ end }};
+        let startTime = new Date();
+        const countdownDuration = {{.MapRefreshTime}};
+        let countdownInterval;
 
-      function getDistance(lat1, lon1, lat2, lon2) {
-         const φ1 = lat1 * piOver180;
-         const φ2 = lat2 * piOver180;
-         const Δφ = (lat2 - lat1) * piOver180;
-         const Δλ = (lon2 - lon1) * piOver180;
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const φ1 = lat1 * piOver180;
+            const φ2 = lat2 * piOver180;
+            const Δφ = (lat2 - lat1) * piOver180;
+            const Δλ = (lon2 - lon1) * piOver180;
 
-         const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-         const d = R * c; // in metres
-         return d;
-      }
+            return R * c; // in meters
+        }
 
-      function getParameterByName(name, url) {
-         if (!url) url = window.location.href;
-         name = name.replace(/[\[\]]/g, '\\$&');
-         var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
-            results = regex.exec(url);
-         if (!results) return null;
-         if (!results[2]) return '';
-         return decodeURIComponent(results[2].replace(/\+/g, ' '));
-      }
+        function stopLT() {
+            if (source) {
+                source.close();
+            }
+        }
 
-      function stopLT() {
-         if (source) {
-            source.close();
-         }
-      }
+        function getParameterByName(name, url = window.location.href) {
+            name = name.replace(/[\[\]]/g, '\\$&');
+            const regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)');
+            const results = regex.exec(url);
+            if (!results) return null;
+            if (!results[2]) return '';
+            return decodeURIComponent(results[2].replace(/\+/g, ' '));
+        }
 
-      // initialize the map
-      var map = L.map('map').setView([{{.DefaultLat }}, {{.DefaultLon }}], {{.DefaultZoom }});
-      L.control.scale().addTo(map)
-      map.options.minZoom = {{.MinZoom }};
-      map.options.maxZoom = {{.MaxZoom }};
-      // load a tile layer
-      const basemaps = {
-         OpenStreetMap: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap<\/a> contributors', subdomains: ['a', 'b', 'c'] }),
-         OpenTopoMap: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 20, attribution: 'Map data: &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap<\/a>, <a href="http://viewfinderpanoramas.org">SRTM<\/a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap<\/a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA<\/a>)', subdomains: ['a', 'b', 'c'] }),
-         GoogleStreets: L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '&copy; GoogleMap', maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }),
-         GoogleHybrid: L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', { attribution: '&copy; GoogleMap', maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }),
-         GoogleSat: L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { attribution: '&copy; GoogleMap', maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }),
-         GoogleTerrain: L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { attribution: '&copy; GoogleMap', maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }),
-      };
+        function updateCountdown() {
+            const countdownElement = document.getElementById('countdown');
+            const timeLeft = Math.max(countdownDuration - Math.floor((new Date() - startTime) / 1000), 0);
+            countdownElement.textContent = ` (${timeLeft}s)`;
+        }
 
-      var overlay = {
-         HikingTrails: L.tileLayer('https://tile.waymarkedtrails.org/{id}/{z}/{x}/{y}.png', { id: 'hiking', attribution: '&copy; <a href="http://waymarkedtrails.org">Sarah Hoffmann<\/a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA<\/a>)' }),
-         CyclingTrails: L.tileLayer('https://tile.waymarkedtrails.org/{id}/{z}/{x}/{y}.png', { id: 'cycling', attribution: '&copy; <a href="http://waymarkedtrails.org">Sarah Hoffmann<\/a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA<\/a>)' }),
-      };
+        document.addEventListener("DOMContentLoaded", function() {
+            const map = L.map('map').setView([{{.DefaultLat}}, {{.DefaultLon}}], {{.DefaultZoom}});
+            L.control.scale().addTo(map);
+            map.options.minZoom = {{.MinZoom}};
+            map.options.maxZoom = {{.MaxZoom}};
+            
+            const basemaps = {
+                OpenStreetMap: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }),
+                OpenTopoMap: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 20, attribution: 'Map data: &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)' }),
+                GoogleStreets: L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '&copy; GoogleMap', maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }),
+                GoogleHybrid: L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', { attribution: '&copy; GoogleMap', maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }),
+                GoogleSat: L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { attribution: '&copy; GoogleMap', maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }),
+                GoogleTerrain: L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { attribution: '&copy; GoogleMap', maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }),
+            };
 
-      L.control.layers(basemaps, overlay).addTo(map);
-      basemaps.OpenStreetMap.addTo(map);
-      var markerGroup = L.layerGroup().addTo(map);
+            const overlay = {
+                HikingTrails: L.tileLayer('https://tile.waymarkedtrails.org/{id}/{z}/{x}/{y}.png', { id: 'hiking', attribution: '&copy; <a href="http://waymarkedtrails.org">Sarah Hoffmann</a> (CC-BY-SA)' }),
+                CyclingTrails: L.tileLayer('https://tile.waymarkedtrails.org/{id}/{z}/{x}/{y}.png', { id: 'cycling', attribution: '&copy; <a href="http://waymarkedtrails.org">Sarah Hoffmann</a> (CC-BY-SA)' }),
+            };
 
-      {{ if .ShowOnlyLastPos}} {{else }}
-      var latlngs = [
-         {{ range .Latlonhistory }}[{{.}}],
+            L.control.layers(basemaps, overlay).addTo(map);
+            basemaps.OpenStreetMap.addTo(map);
+            const markerGroup = L.layerGroup().addTo(map);
+
+            {{ if not .ShowOnlyLastPos }}
+            const polyline = L.polyline(latlngs, { color: 'red' }).addTo(map);
+            map.fitBounds(polyline.getBounds());
+
+            for (let i = 1; i < latlngs.length; i++) {
+                const prevLatLng = latlngs[i - 1];
+                const currLatLng = latlngs[i];
+                totalDistance += getDistance(prevLatLng[0], prevLatLng[1], currLatLng[0], currLatLng[1]);
+            }
+
+            document.getElementById("distance").textContent = `Distance: ${(totalDistance / 1000).toFixed(2)} km`;
             {{ end }}
-         ];
 
-      var polyline = L.polyline(latlngs, { color: 'red' }).addTo(map);
-      // zoom the map to the polyline
-      map.fitBounds(polyline.getBounds());
+            const user = getParameterByName('user');
+            const session = getParameterByName('session');
+            const source = new EventSource(`/events?user=${user}&session=${session}`);
+            source.addEventListener("location", function(event) {
+                const data = JSON.parse(event.data);
+                markerGroup.clearLayers();
+                const marker = L.marker([data.lat, data.lng]).addTo(markerGroup)
+                    .bindPopup(`Lat: ${data.lat}<br>Lon: ${data.lng}<br>Altitude: ${data.alt}<br>Speed: ${data.speed}<br>Time: ${data.time}<br>Bearing: ${data.bearing}<br>HDOP: ${data.hdop}`).openPopup();
+                
+                {{ if .ShowPrecisonCircle }}
+                const circle = L.circle([data.lat, data.lng], {
+                    color: 'blue',
+                    fillColor: '#003',
+                    fillOpacity: 0.3,
+                    radius: data.hdop
+                }).addTo(markerGroup);
+                {{ end }}
+                
+                latlngs.push([data.lat, data.lng]);
+                polyline.setLatLngs(latlngs);
 
-      for (var i = 1; i < latlngs.length; i++) {
-         const prevLatLng = latlngs[i - 1];
-         const currLatLng = latlngs[i];
-         const distance = getDistance(prevLatLng[0], prevLatLng[1], currLatLng[0], currLatLng[1]);
-         totalDistance += distance;
-      }
+                if (latlngs.length > 1) {
+                    const prevLatLng = latlngs[latlngs.length - 2];
+                    const currLatLng = latlngs[latlngs.length - 1];
+                    totalDistance += getDistance(prevLatLng[0], prevLatLng[1], currLatLng[0], currLatLng[1]);
+                    document.getElementById("distance").textContent = `Total displayed Distance: ${(totalDistance / 1000).toFixed(2)} km`;
+                }
+            });
 
-      document.getElementById("distance").innerHTML = "Distance: " + (totalDistance / 1000).toFixed(2) + " km";
-      {{ end }}
-      {{.Lastpos }}
-      var user = getParameterByName('user'); // get the value of the 'user' variable from the query string
-      var session = getParameterByName('session'); // get the value of the 'session' variable from the query string
-      var source = new EventSource("/events?user=" + user + "&session=" + session)
-      source.addEventListener("location", function (event) {
-         var data = JSON.parse(event.data);
-         markerGroup.clearLayers();
-         L.marker([data.lat, data.lng]).addTo(markerGroup).bindPopup('Lat: ' + data.lat + '<br>Lon: ' + data.lng + '<br>Altitude: ' + data.alt + '<br>Speed: ' + data.speed + '<br>Time: ' + data.time + '<br>Bearing: ' + data.bearing + '<br>HDOP: ' + data.hdop).openPopup();
-         {{ if .ShowPrecisonCircle}}
-         var circle = L.circle([data.lat, data.lng], {
-            color: 'blue',
-            fillColor: '#003',
-            fillOpacity: 0.3,
-            radius: data.hdop
-         }).addTo(markerGroup);
-
-         {{ end }}
-         L.marker([data.lat, data.lng]).addTo(markerGroup);
-         latlngs.push([data.lat, data.lng]);
-         polyline.setLatLngs(latlngs);
-         if (latlngs.length > 1) {
-            const prevLatLng = latlngs[latlngs.length - 2];
-            const currLatLng = latlngs[latlngs.length - 1];
-            const distance = getDistance(prevLatLng[0], prevLatLng[1], currLatLng[0], currLatLng[1]);
-            totalDistance += distance;
-            document.getElementById("distance").innerHTML = "Total displayed Distance: " + (totalDistance / 1000).toFixed(2) + " km";
-         }
-      });
-      var countdownDuration = {{.MapRefreshTime}};
-
-      function updateCountdown() {
-         var countdownElement = document.getElementById('countdown');
-         var timeLeft = Math.max(countdownDuration - Math.floor((new Date() - startTime) / 1000), 0);
-         countdownElement.innerHTML = ' (' + timeLeft + 's)';
-      }
-
-      var startTime = new Date();
-      var countdownInterval = setInterval(updateCountdown, 1000);
-
-      updateCountdown();
-
-      setTimeout(function () {
-         clearInterval(countdownInterval);
-         location.reload();
-      }, countdownDuration * 1000);
-
-   </script>
+            updateCountdown();
+            countdownInterval = setInterval(updateCountdown, 1000);
+            setTimeout(() => {
+                clearInterval(countdownInterval);
+                location.reload();
+            }, countdownDuration * 1000);
+        });
+    </script>
 </body>
-
 </html>
