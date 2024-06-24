@@ -1,4 +1,4 @@
-FROM golang:alpine AS builder
+FROM golang:latest AS builder
 WORKDIR /app
 COPY . .
 RUN apk update && apk add git gcc build-base
