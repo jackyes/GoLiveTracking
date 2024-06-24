@@ -1,13 +1,18 @@
 FROM golang:latest AS builder
 WORKDIR /app
 COPY . .
-RUN apk update && apk add git gcc build-base
+RUN apt update && apt install -y git gcc build-essential
 RUN go mod download
-RUN  CGO_ENABLED=1 go build -o GOLiveTracking .
-FROM alpine:latest
-RUN apk update && apk upgrade && rm -rf /var/cache/*
+RUN CGO_ENABLED=1 go build -o GOLiveTracking .
+
+FROM debian:latest
+RUN apt update && apt full-upgrade -y && rm -rf /var/cache/*
 WORKDIR /root/
 COPY . .
 COPY --from=builder /app/GOLiveTracking .
+
+RUN adduser -D -g "" appuser
+USER appuser
+
 EXPOSE 8080
 CMD ["./GOLiveTracking"]
