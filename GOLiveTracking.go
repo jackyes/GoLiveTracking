@@ -22,6 +22,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Constants and Global Variables
 const configPath = "./config.yaml"
 
 var templates = template.Must(template.ParseFiles("pages/index.html"))
@@ -35,6 +36,7 @@ var (
 	stmtFetchGpsTrack      *sql.Stmt
 )
 
+// Struct Definitions
 type Point struct {
 	ID      int
 	Lat     string
@@ -128,6 +130,7 @@ type GPXPoint struct {
 	Time      string  `xml:"time"`
 }
 
+// Main function
 func main() {
 	// Load the application configuration
 	ReadConfig()
@@ -155,6 +158,7 @@ func main() {
 	}
 	defer CloseDB() // Ensure the prepared statements are closed when the main function exits
 
+	// Setup HTTP server and routes
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/addpoint", func(w http.ResponseWriter, r *http.Request) { getAddPoint(w, r, db) })
@@ -182,6 +186,7 @@ func main() {
 	}
 }
 
+// Initialize prepared statements
 func InitDB(db *sql.DB) error {
 	// Initialize the prepared statement when your application starts
 	var err error
@@ -206,10 +211,10 @@ func InitDB(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
+// Close prepared statements
 func CloseDB() {
 	stmtWithUserAndSession.Close()
 	stmtWithUserOnly.Close()
@@ -368,7 +373,6 @@ func buildLatLonHistory(points []Point) []string {
 			latLonHistory.WriteRune('!')
 		}
 	}
-
 	return strings.Split(latLonHistory.String(), "!")
 }
 
@@ -473,7 +477,6 @@ func getUserSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-
 	lat := r.URL.Query().Get("lat")
 	lon := r.URL.Query().Get("lon")
 	timestamp := r.URL.Query().Get("timestamp")
@@ -495,9 +498,9 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			sanitize(lat), sanitize(lon), sanitize(timestamp), sanitize(altitude), sanitize(speed), sanitize(bearing), sanitize(hdop), sanitize(user), sanitize(session), sanitize(key))
 	}
 
-	//data verification will happen here...
+	// Data verification
 	if lat == "" || lon == "" {
-		fmt.Println("LAT/LON not fund")
+		fmt.Println("LAT/LON not found")
 		return
 	} else if !isNumeric(lat) || !isNumeric(lon) {
 		fmt.Println("LAT/LON Not number")
@@ -516,7 +519,7 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		fmt.Println("Timestamp not numeric")
 		return
 	} else if len(timestamp) > AppConfig.MaxGetParmLen {
-		fmt.Println("timestamp too big")
+		fmt.Println("Timestamp too big")
 		return
 	} else if AppConfig.ConvertTimestamp {
 		timestamp = fmt.Sprintf("%s", TimeStampConvert(timestamp))
@@ -542,16 +545,16 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	if bearing == "" {
 		bearing = "0"
 	} else if len(bearing) > AppConfig.MaxGetParmLen {
-		fmt.Println("bearing too big")
+		fmt.Println("Bearing too big")
 		return
 	}
 	if hdop == "" {
 		hdop = "0"
 	} else if !isNumeric(hdop) {
-		fmt.Println("hdop not numeric")
+		fmt.Println("HDOP not numeric")
 		return
 	} else if len(hdop) > AppConfig.MaxGetParmLen {
-		fmt.Println("hdop too big")
+		fmt.Println("HDOP too big")
 		return
 	}
 	if user == "" {
@@ -669,7 +672,6 @@ func sanitizeInput(r *http.Request) (user string, session string) {
 
 // getLastKnownPosition retrieves the last known position for a user and session from the database.
 func getLastKnownPosition(user string, session string) (*LatLng, error) {
-
 	if user == "0" {
 		return nil, nil
 	}
@@ -822,7 +824,6 @@ func ReadConfig() {
 
 	decoder := yaml.NewDecoder(f)
 	err = decoder.Decode(&AppConfig)
-
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -857,7 +858,7 @@ func CreateDB() {
 	checkErr(err)
 	fmt.Println("Database connection established.")
 
-	// Crea la tabella Points
+	// Create the Points table
 	_, err = db.Exec(`
         CREATE TABLE Points (
             ID INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
