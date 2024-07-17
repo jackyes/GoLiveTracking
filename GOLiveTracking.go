@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"text/template"
@@ -289,13 +288,10 @@ func pushAssets(w http.ResponseWriter) {
 
 func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	var limit string
-	var reverseOrder string = "ASC"
 	if AppConfig.AllowBypassMaxShowPoint && maxShowPoint != "" {
 		limit = " LIMIT ?"
-		reverseOrder = "DESC"
 	} else if AppConfig.MaxShowPoint != "0" {
 		limit = " LIMIT ?"
-		reverseOrder = "ASC"
 	}
 
 	var whereClause strings.Builder
@@ -312,8 +308,8 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	query := fmt.Sprintf(`
                 SELECT lat, lon, alt, speed, time, bearing, hdop
                 FROM Points %s
-                ORDER BY ID %s
-                %s`, whereClause.String(), reverseOrder, limit)
+                ORDER BY time DESC
+                %s`, whereClause.String(), limit)
 
 	stmt, err := db.Prepare(query)
 	if err != nil {
@@ -345,20 +341,21 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 		points = append(points, point)
 	}
 
-	if reverseOrder == "DESC" {
-		sort.Slice(points, func(i, j int) bool {
-			timeI, _ := time.Parse(time.RFC3339, points[i].Time)
-			timeJ, _ := time.Parse(time.RFC3339, points[j].Time)
-			return timeJ.Before(timeI)
-		})
-	}
-
 	if err := rows.Err(); err != nil {
 		checkErr(err)
 	}
 
+	// Invert the points if maxShowPoint is specified
+	if limit != "" {
+		for i, j := 0, len(points)-1; i < j; i, j = i+1, j-1 {
+			points[i], points[j] = points[j], points[i]
+		}
+	}
+
 	return points
 }
+
+
 
 func buildLatLonHistory(points []Point) []string {
 	// Use strings.Builder for efficient string concatenation
