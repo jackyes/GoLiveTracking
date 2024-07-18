@@ -58,7 +58,7 @@
             padding: 20px;
             background-color: #fff;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            margin: 20px;
+            margin: 20px 20px 2px 20px;
             border-radius: 8px;
         }
 
@@ -96,7 +96,7 @@
             text-align: center;
             background-color: #fff;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            margin: 0 20px 0 20px;
+            margin: 0 20px 2px 20px;
             border-radius: 8px;
             font-size: 18px;
         }
@@ -169,7 +169,7 @@
             L.control.scale().addTo(map);
             map.options.minZoom = {{.MinZoom}};
             map.options.maxZoom = {{.MaxZoom}};
-            
+
             const basemaps = {
                 OpenStreetMap: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }),
                 OpenTopoMap: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 20, attribution: 'Map data: &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)' }),
@@ -209,7 +209,7 @@
                 markerGroup.clearLayers();
                 const marker = L.marker([data.lat, data.lng]).addTo(markerGroup)
                     .bindPopup(`Lat: ${data.lat}<br>Lon: ${data.lng}<br>Altitude: ${data.alt}<br>Speed: ${data.speed}<br>Time: ${data.time}<br>Bearing: ${data.bearing}<br>HDOP: ${data.hdop}`).openPopup();
-                
+
                 {{ if .ShowPrecisonCircle }}
                 const circle = L.circle([data.lat, data.lng], {
                     color: 'blue',
@@ -218,7 +218,7 @@
                     radius: data.hdop
                 }).addTo(markerGroup);
                 {{ end }}
-                
+
                 latlngs.push([data.lat, data.lng]);
                 polyline.setLatLngs(latlngs);
 
