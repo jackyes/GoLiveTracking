@@ -355,22 +355,24 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 	return points
 }
 
-
-
 func buildLatLonHistory(points []Point) []string {
-	// Use strings.Builder for efficient string concatenation
-	var latLonHistory strings.Builder
+    // Pre-allocate the slice to avoid reallocation
+    result := make([]string, len(points))
 
-	// Iterate over the points and append each coordinate pair
-	for i, point := range points {
-		latLonHistory.WriteString(point.Lat + "," + point.Lon)
+    // Use strings.Builder for efficient string concatenation
+    var builder strings.Builder
+    builder.Grow(24 * len(points)) // Pre-allocate memory (assuming average 24 bytes per point)
 
-		// Append a comma separator unless it's the last element in the list
-		if i < len(points)-1 {
-			latLonHistory.WriteRune('!')
-		}
-	}
-	return strings.Split(latLonHistory.String(), "!")
+    // Iterate over the points and build each coordinate pair
+    for i, point := range points {
+        builder.Reset() // Clear the builder for reuse
+        builder.WriteString(point.Lat)
+        builder.WriteByte(',')
+        builder.WriteString(point.Lon)
+        result[i] = builder.String()
+    }
+
+    return result
 }
 
 func checkParam(param string, maxLen int) bool {
