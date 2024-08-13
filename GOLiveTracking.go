@@ -814,15 +814,23 @@ func TimeStampConvert(e string) (dtime time.Time) {
 	if err != nil { // If there were any errors during parsing operation then it prints out error and returns zero value for time.
 		fmt.Println(err)
 	}
-	// Loading location based on the application configured timezone
+	// Load the location based on the application's configured timezone
 	loc, err := time.LoadLocation(AppConfig.TimeZone)
 	if err != nil { // If there were any errors during loading operation then it prints out error and returns zero value for time.
 		fmt.Println(err)
 	}
-	// Converting the parsed Int64 data into Unix timestamp, dividing by '1000' to convert milliseconds since epoch to seconds because ParseInt function parses till it encounters a non-digit character and returns integer value until that moment which might be in millisecond format.
-	dtime = time.Unix(data/1000, 0).In(loc) // 'dtime' variable will hold the converted date based on application configured timezone location after this operation is completed successfully without any errors during parsing or loading operations beforehand .
+	
+    // Check if the timestamp is in milliseconds or seconds format
+    if data > 10000000000 { // milliseconds
+        // Convert milliseconds to seconds and create a time object
+        dtime = time.Unix(data/1000, 0).In(loc)
+    } else { // seconds
+        // Create a time object directly from the seconds value
+        dtime = time.Unix(data, 0).In(loc)
+    }
 	return dtime                            // Returning final computed Unix timestamp in specific Timezone.
 }
+
 
 func isSafeString(str string) bool {
 	if str == "" {
