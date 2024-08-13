@@ -357,19 +357,15 @@ func fetchPointsFromDB(db *sql.DB, user, session, maxShowPoint string) []Point {
 
 func buildLatLonHistory(points []Point) []string {
     // Pre-allocate the slice to avoid reallocation
-    result := make([]string, len(points))
+    result := make([]string, 0, len(points)) 
 
     // Use strings.Builder for efficient string concatenation
-    var builder strings.Builder
-    builder.Grow(24 * len(points)) // Pre-allocate memory (assuming average 24 bytes per point)
-
-    // Iterate over the points and build each coordinate pair
-    for i, point := range points {
-        builder.Reset() // Clear the builder for reuse
+    for _, point := range points {
+        var builder strings.Builder
         builder.WriteString(point.Lat)
         builder.WriteByte(',')
         builder.WriteString(point.Lon)
-        result[i] = builder.String()
+        result = append(result, builder.String())
     }
 
     return result
@@ -576,29 +572,12 @@ func getAddPoint(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 	//data verification finish...
 
-	// Begin transaction
-	tx, err := db.Begin()
+	_, err := stmtInsertPoint.Exec(lat, lon, altitude, speed, timestamp, bearing, hdop, user, session)
 	if err != nil {
-		http.Error(w, "Server Error", http.StatusInternalServerError)
-		log.Println("Transaction start error:", err)
-		return
-	}
-
-	// Execute the prepared statement
-	_, err = tx.Stmt(stmtInsertPoint).Exec(lat, lon, altitude, speed, timestamp, bearing, hdop, user, session)
-	if err != nil {
-		tx.Rollback()
 		http.Error(w, "Server Error", http.StatusInternalServerError)
 		log.Println("Insert exec error:", err)
 		return
-	}
-
-	// Commit the transaction
-	if err := tx.Commit(); err != nil {
-		http.Error(w, "Server Error", http.StatusInternalServerError)
-		log.Println("Transaction commit error:", err)
-		return
-	}
+	} 
 
 	// Send back a successful response
 	w.WriteHeader(http.StatusOK)
